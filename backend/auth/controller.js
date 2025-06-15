@@ -109,3 +109,20 @@ module.exports.refreshToken = async (req, res) => {
       .json({ message: "Invalid or expired refresh token" });
   }
 };
+
+module.exports.logout = async (req, res) => {
+  try {
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "development",
+      sameSite: "strict",
+    });
+
+    res.status(200).json({
+      message: "Logout successful"
+    });
+  } catch (err) {
+    console.error("Logout Error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
