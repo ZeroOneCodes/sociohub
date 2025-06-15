@@ -3,6 +3,7 @@ const WorkingRoute = require("./working/routes");
 const AuthRoute = require("./auth/routes");
 const startServer = require("./checkDb");
 const express = require("express");
+const passport = require("passport");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 
@@ -15,6 +16,7 @@ app.use(cors({
 
 app.use(express.json());
 app.use(cookieParser());
+app.use(passport.initialize())
 
 startServer();
 app.use("/api/v1", AuthRoute);

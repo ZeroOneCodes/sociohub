@@ -126,3 +126,11 @@ module.exports.logout = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
+module.exports.twitterCallback = (req, res) => {
+  res.redirect('http://localhost:5173/connect/apps');
+};
+
+module.exports.linkedInCallback = (req, res) => {
+  res.redirect('http://localhost:5173/connect/apps');
+};
