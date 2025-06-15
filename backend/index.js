@@ -5,8 +5,9 @@ const startServer = require("./checkDb");
 const express = require("express");
 const passport = require("passport");
 const cors = require("cors");
+const session = require('express-session');
 const cookieParser = require("cookie-parser");
-
+require("./auth/passport");
 const app = express();
 
 app.use(cors({
@@ -16,7 +17,18 @@ app.use(cors({
 
 app.use(express.json());
 app.use(cookieParser());
+app.use(session({
+  secret: 'your_secret_key_here',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: false,
+    httpOnly: true,
+    maxAge: 1000 * 60 * 60 * 24, // 1 day
+  }
+}));
 app.use(passport.initialize())
+app.use(passport.session())
 
 startServer();
 app.use("/api/v1", AuthRoute);

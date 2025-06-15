@@ -1,7 +1,7 @@
 require("dotenv").config();
 const passport = require("passport");
 const TwitterStrategy = require("passport-twitter").Strategy;
-const LinkedInStrategy = require("passport-linkedin-oauth2").Strategy;
+const LinkedInStrategy = require("../lib/index").Strategy;
 
 passport.use(new TwitterStrategy({
   consumerKey: process.env.TWITTER_CONSUMER_KEY,
@@ -19,7 +19,8 @@ passport.use(new LinkedInStrategy({
   clientID: process.env.LINKEDIN_CLIENT_ID,
   clientSecret: process.env.LINKEDIN_CLIENT_SECRET,
   callbackURL: process.env.LINKEDIN_CALLBACK_URL,
-  scope: ['openid', 'email', 'w_member_social'],
+  scope: ['openid','profile','email', 'w_member_social'],
+  state: true
 }, function(accessToken, refreshToken, profile, done) {
   console.log("LINKEDIN PROFILE",profile)
   // Save the user or profile in DB if needed
