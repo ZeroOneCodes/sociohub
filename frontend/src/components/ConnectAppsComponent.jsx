@@ -64,8 +64,9 @@ const ConnectAppsComponent = () => {
     <div className="min-h-screen flex bg-[#0D1117]">
       {/* Sidebar Navigation */}
       <aside
-      className={`bg-gradient-to-b from-[#1a1f2c] to-[#161B22] text-white flex flex-col h-screen fixed transition-all duration-300 ease-in-out border-r border-[#30363D]/50 backdrop-blur-lg shadow-2xl z-10 
+      className={`text-white flex flex-col h-screen fixed transition-all duration-300 ease-in-out border-r border-[#30363D]/50 backdrop-blur-lg shadow-2xl z-10 
       ${isNavExpanded ? "w-72" : "w-20"}`}
+      style={{backgroundColor: 'rgb(25,26,26)'}}
       onMouseEnter={() => setIsNavExpanded(true)}
       onMouseLeave={() => setIsNavExpanded(false)}
     >
@@ -81,15 +82,14 @@ const ConnectAppsComponent = () => {
               />
             </Link>
             <div className="flex flex-col">
-              <h1 className="text-2xl font-semibold bg-clip-text text-white animate-shine">
+              <h1 className="text-2xl bg-clip-text text-white font-semibold animate-shine">
                 SocioHub
               </h1>
-              <span className="text-xs text-gray-400">Dashboard</span>
             </div>
           </div>
         ) : (
-          <div className="p-2 rounded-xl bg-gradient-to-r from-[#0078D7]/10 to-[#00A4EF]/10 hover:from-[#0078D7]/20 hover:to-[#00A4EF]/20 transition-all">
-            <FaBars className="text-[#0078D7] text-xl" />
+          <div className="p-2 rounded-xl  hover:bg-gray-100 transition-all">
+            <FaBars className="text-[#11111] text-xl" />
           </div>
         )}
       </div>
@@ -99,14 +99,7 @@ const ConnectAppsComponent = () => {
         {isNavExpanded ? (
           <>
             <div className="flex items-center group cursor-pointer">
-              <div className="relative">
-                <img
-                  src={user.profileImage}
-                  alt="Profile"
-                  className="w-12 h-12 rounded-xl ring-2 ring-[#0078D7]/30 group-hover:ring-[#0078D7] transition-all"
-                />
-                <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-[#161B22]" />
-              </div>
+              
               <div className="ml-3">
                 <p className="font-semibold text-white group-hover:text-[#0078D7] transition-colors">
                   {user.name}
@@ -114,22 +107,13 @@ const ConnectAppsComponent = () => {
                 <p className="text-xs text-[#0078D7]">{user.username}</p>
               </div>
             </div>
-            <div className="flex items-center mt-4 p-3 bg-gradient-to-r from-[#21262D] to-[#21262D]/50 rounded-xl backdrop-blur-sm">
-              <FaCoins className="text-yellow-400 mr-2" />
+            <div className="flex items-center mt-4 p-3 rounded-xl backdrop-blur-sm" style={{backgroundColor: 'rgb(32,34,34)'}}>
               <span className="text-sm font-medium">{user.coins} coins</span>
-              <button className="ml-auto bg-gradient-to-r from-[#0078D7] to-[#00A4EF] hover:from-[#0068BD] hover:to-[#0094DF] text-white text-xs px-4 py-1.5 rounded-lg transition-all duration-300 shadow-lg shadow-[#0078D7]/20 hover:shadow-[#0078D7]/40">
-                Add
-              </button>
             </div>
           </>
         ) : (
           <div className="relative group">
-            <img
-              src={user.profileImage}
-              alt="Profile"
-              className="w-12 h-12 rounded-xl ring-2 ring-[#0078D7]/30 group-hover:ring-[#0078D7] transition-all"
-            />
-            <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-[#161B22]" />
+            
           </div>
         )}
       </div>
@@ -148,8 +132,23 @@ const ConnectAppsComponent = () => {
                 ${
                   activeItem === item.id
                     ? "bg-gradient-to-r from-[#0078D7]/20 to-[#00A4EF]/10 text-[#0078D7]"
-                    : "text-gray-400 hover:text-white hover:bg-[#21262D]"
+                    : "text-gray-400 hover:text-white"
                 }`}
+                style={{
+                  backgroundColor: activeItem === item.id 
+                    ? 'rgba(0,120,215,0.15)' 
+                    : 'transparent'
+                }}
+                onMouseEnter={(e) => {
+                  if (activeItem !== item.id) {
+                    e.target.style.backgroundColor = 'rgb(32,34,34)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (activeItem !== item.id) {
+                    e.target.style.backgroundColor = 'transparent';
+                  }
+                }}
               >
                 <span className={`${isNavExpanded ? "mr-3" : ""} text-xl transition-transform group-hover:scale-110`}>
                   {item.icon}
@@ -168,6 +167,12 @@ const ConnectAppsComponent = () => {
         <button
           className={`flex items-center w-full px-4 py-3 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-xl transition-all duration-300
           ${isNavExpanded ? "" : "justify-center"}`}
+          onMouseEnter={(e) => {
+            e.target.style.backgroundColor = 'rgba(248,113,113,0.1)';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.backgroundColor = 'transparent';
+          }}
         >
           <FaSignOutAlt className={`text-xl ${isNavExpanded ? "mr-3" : ""}`} />
           {isNavExpanded && <span className="text-sm font-medium">Logout</span>}
@@ -178,15 +183,16 @@ const ConnectAppsComponent = () => {
       {/* Main Content */}
       <main
         className={`flex-grow ${mainContentMargin} transition-all duration-300 p-8`}
+        style={{backgroundColor: 'rgb(32,34,34)'}}
       >
         <div className="w-full max-w-4xl mx-auto"> {/* Full width, centered */}
-          <div className="bg-[#0D1117] rounded-xl shadow-2xl overflow-hidden border border-slate-700">
+          <div className="rounded-xl shadow-2xl overflow-hidden border border-slate-700" style={{backgroundColor: 'rgb(32,34,34)'}}>
             <ConnectHeader />
 
             {/* Content */}
             <div className="p-6">
               <div className="text-center mb-8">
-                <div className="w-16 h-16 bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{backgroundColor: 'rgb(25,27,27)'}}>
                   <CheckCircle className="text-blue-400 text-3xl" />
                 </div>
                 <h2 className="text-xl font-semibold text-white">
