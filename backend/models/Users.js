@@ -2,7 +2,7 @@ const { DataTypes } = require('sequelize');
 const sequelize = require('../dbconfig');
 
 const Users = sequelize.define(
-  "Users",
+  "users",
   {
     id: {
       type: DataTypes.INTEGER,
@@ -60,7 +60,7 @@ const Users = sequelize.define(
     },
   },
   {
-    tableName: "Users",
+    tableName: "users",
     timestamps: true, // This enables automatic createdAt and updatedAt handling
     indexes: [
       {
