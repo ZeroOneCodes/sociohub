@@ -4,7 +4,7 @@ const passport = require("passport");
 const router = express.Router();
 const AuthController = require("./controller");
 
-const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL;
+const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || "";
 
 router.post("/auth/signup", AuthController.signup);
 router.post("/auth/login", AuthController.login);
