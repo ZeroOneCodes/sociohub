@@ -1,6 +1,7 @@
 require("dotenv").config();
 const WorkingRoute = require("./working/routes");
 const AuthRoute = require("./auth/routes");
+const PostRoute = require("./posts/routes");
 const startServer = require("./checkDb");
 const express = require("express");
 const passport = require("passport");
@@ -33,6 +34,7 @@ app.use(passport.session())
 startServer();
 app.use("/api/v1", AuthRoute);
 app.use("/api/v1", WorkingRoute);
+app.use("/api/v1", PostRoute);
 
 app.listen(process.env.PORT, () => {
   console.log(`Server connected at http://localhost:${process.env.PORT}`);
