@@ -114,6 +114,112 @@ passport.use(new LinkedInStrategy({
   }
 }));
 
+// Instagram
+// passport.use(new InstagramStrategy({
+//   clientID: process.env.INSTAGRAM_CLIENT_ID,
+//   clientSecret: process.env.INSTAGRAM_CLIENT_SECRET,
+//   callbackURL: process.env.INSTAGRAM_CALLBACK_URL,
+//   scope: ['user_profile', 'user_media'], // Instagram specific scopes
+//   state: true
+// }, async function(accessToken, refreshToken, profile, done) {
+//   try {
+//     // Instagram profile structure is different from LinkedIn
+//     const user = await Users.findOne({
+//       where: { email: profile.username + '@instagram.com' } // Instagram doesn't provide email by default
+//     });
+
+//     if (!user) {
+//       // You might want to create a new user here or handle differently
+//       return done(new Error('User not found'), null);
+//     }
+
+//     const instagramProfileData = {
+//       user_id: user.user_id,
+//       instagram_id: profile.id,
+//       username: profile.username,
+//       display_name: profile.displayName,
+//       profile_picture: profile._json.data?.profile_picture || null,
+//       access_token: accessToken,
+//       refresh_token: refreshToken || ''
+//     };
+
+//     const [instagramProfile, created] = await InstagramProfile.upsert(instagramProfileData, {
+//       returning: true,
+//       conflictFields: ['user_id'],
+//       logging: console.log
+//     });
+
+//     const userData = {
+//       ...user.get({ plain: true }),
+//       instagramProfile: instagramProfile.get({ plain: true }),
+//       accessToken
+//     };
+
+//     return done(null, userData);
+//   } catch (error) {
+//     console.error('Instagram authentication error:', error);
+//     return done(error, null);
+//   }
+// }));
+
+// Facebook
+// passport.use(new FacebookStrategy({
+//   clientID: process.env.FACEBOOK_APP_ID,
+//   clientSecret: process.env.FACEBOOK_APP_SECRET,
+//   callbackURL: process.env.FACEBOOK_CALLBACK_URL,
+//   profileFields: ['id', 'emails', 'name', 'displayName', 'photos'], // Fields to request
+//   scope: ['email', 'public_profile'], // Permissions
+//   state: true // CSRF protection
+// }, async (accessToken, refreshToken, profile, done) => {
+//   try {
+//     // Facebook may not always return an email, so we check
+//     const email = profile.emails?.[0]?.value || `${profile.id}@facebook.com`;
+
+//     // Find or create the user
+//     let user = await Users.findOne({ where: { email } });
+
+//     if (!user) {
+//       // Optionally create a new user if not found
+//       user = await Users.create({
+//         email,
+//         name: profile.displayName || `${profile.name?.givenName} ${profile.name?.familyName}`,
+//         // Add other fields as needed
+//       });
+//     }
+
+//     // Store Facebook profile data
+//     const facebookProfileData = {
+//       user_id: user.user_id,
+//       facebook_id: profile.id,
+//       email: email,
+//       display_name: profile.displayName,
+//       first_name: profile.name?.givenName || '',
+//       last_name: profile.name?.familyName || '',
+//       profile_picture: profile.photos?.[0]?.value || null,
+//       access_token: accessToken,
+//       refresh_token: refreshToken || ''
+//     };
+
+//     // Upsert the Facebook profile
+//     const [facebookProfile, created] = await FacebookProfile.upsert(facebookProfileData, {
+//       returning: true,
+//       conflictFields: ['user_id'],
+//       logging: console.log
+//     });
+
+//     const userData = {
+//       ...user.get({ plain: true }),
+//       facebookProfile: facebookProfile.get({ plain: true }),
+//       accessToken
+//     };
+
+//     return done(null, userData);
+//   } catch (error) {
+//     console.error('Facebook authentication error:', error);
+//     return done(error, null);
+//   }
+// }));
+
 passport.serializeUser((user, done) => {
   done(null, user);
 });
