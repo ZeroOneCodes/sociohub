@@ -6,6 +6,8 @@ const { generateAccessToken, generateRefreshToken } = require("./jwt");
 const TwitterProfile = require('../models/TwitterProfile.js');
 const LinkedInProfile = require('../models/LinkedProfile.js');
 
+const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || "";
+
 module.exports.signup = async (req, res) => {
   const { firstName, lastName, email, password } = req.body;
 
