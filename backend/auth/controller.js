@@ -1,7 +1,10 @@
+require("dotenv").config();
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const Users = require("../models/Users");
 const { generateAccessToken, generateRefreshToken } = require("./jwt");
+const TwitterProfile = require('../models/TwitterProfile.js');
+const LinkedInProfile = require('../models/LinkedProfile.js');
 
 module.exports.signup = async (req, res) => {
   const { firstName, lastName, email, password } = req.body;
@@ -128,9 +131,101 @@ module.exports.logout = async (req, res) => {
 };
 
 module.exports.twitterCallback = (req, res) => {
-  res.redirect('http://localhost:5173/connect/apps');
+  res.redirect(`${FRONTEND_BASE_URL}/connect/apps`);
 };
 
 module.exports.linkedInCallback = (req, res) => {
-  res.redirect('http://localhost:5173/connect/apps');
+  res.redirect(`${FRONTEND_BASE_URL}/connect/apps`);
 };
+
+module.exports.checkTwitterStatus = async (req, res) => {
+  try {
+    const userId = req.headers['user-id'];
+    
+    if (!userId) {
+      return res.status(400).json({ 
+        error: 'User ID is required' 
+      });
+    }
+
+    // Find the Twitter profile for this user
+    const twitterProfile = await TwitterProfile.findOne({ 
+      where: { user_id: userId } 
+    });
+
+    if (!twitterProfile) {
+      return res.json({ 
+        connected: false,
+        message: 'No Twitter profile found for this user'
+      });
+    }
+
+    // Check if tokens exist
+    const hasTokens = twitterProfile.twitter_token && twitterProfile.twitter_secret;
+
+    res.json({
+      status:true,
+      profile: {
+        name: twitterProfile.name,
+        screen_name: twitterProfile.screen_name,
+        // Include other profile info if needed
+      },
+      tokens: {
+        hasToken: !!twitterProfile.twitter_token,
+        hasSecret: !!twitterProfile.twitter_secret
+      }
+    });
+
+  } catch (error) {
+    console.error('Error checking Twitter status:', error);
+    res.status(500).json({ 
+      error: 'Failed to check Twitter connection status',
+      details: error.message 
+    });
+  }
+};
+
+module.exports.checkLinkedInStatus = async (req, res) => {
+  try {
+    const userId = req.headers['user-id'];
+    
+    if (!userId) {
+      return res.status(400).json({ 
+        error: 'User ID is required' 
+      });
+    }
+
+    const linkedInProfile = await LinkedInProfile.findOne({ 
+      where: { user_id: userId } 
+    });
+
+    if (!linkedInProfile) {
+      return res.json({ 
+        connected: false,
+        message: 'No LinkedIn profile found for this user'
+      });
+    }
+
+    res.json({
+      status: true,
+      profile: {
+        name: linkedInProfile.name,
+        email: linkedInProfile.email,
+        picture: linkedInProfile.picture
+      },
+      tokens: {
+        hasAccessToken: !!linkedInProfile.access_token,
+        hasRefreshToken: !!linkedInProfile.refresh_token
+      }
+    });
+
+  } catch (error) {
+    console.error('Error checking LinkedIn status:', error);
+    res.status(500).json({ 
+      error: 'Failed to check LinkedIn connection status',
+      details: error.message 
+    });
+  }
+};
+
+

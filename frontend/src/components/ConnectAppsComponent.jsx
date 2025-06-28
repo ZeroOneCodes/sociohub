@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState,useEffect } from "react";
 import {
   Twitter,
   Linkedin,
@@ -31,6 +31,95 @@ const ConnectAppsComponent = () => {
   const [isNavExpanded, setIsNavExpanded] = useState(false);
   const [activeItem, setActiveItem] = useState("home");
   const navigate = useNavigate();
+
+  useEffect(() => {
+  const checkTwitterAuth = async () => {
+    try {
+      const userId = localStorage.getItem('userId');
+      console.log("Checking Twitter status for user:", userId);
+      
+      const response = await axios.get(`${baseURL}/api/v1/auth/twitter/status`, {
+        withCredentials: true,
+        headers: {
+          'User-ID': userId,
+        },
+      });
+
+      console.log("Twitter API response:", response.data);
+      
+      // Update connection status based on the new response format
+      const isConnected = response.data.status && 
+                         response.data.tokens?.hasToken && 
+                         response.data.tokens?.hasSecret;
+      
+      setTwitterConnected(isConnected);
+      
+      // Store profile info if connected
+      if (isConnected) {
+        console.log("Twitter connected with profile:", response.data.profile);
+        localStorage.setItem('twitterProfile', JSON.stringify({
+          name: response.data.profile.name,
+          screenName: response.data.profile.screen_name
+        }));
+      } else {
+        console.log("Twitter not connected");
+        localStorage.removeItem('twitterProfile');
+      }
+
+    } catch (error) {
+      console.error('Error checking Twitter authentication:', error);
+      setTwitterConnected(false);
+      localStorage.removeItem('twitterProfile');
+    }
+  };
+  
+  checkTwitterAuth();
+}, []);
+
+  useEffect(() => {
+  const checkLinkedInAuth = async () => {
+    try {
+      const userId = localStorage.getItem('userId');
+      console.log("Checking LinkedIn status for user:", userId);
+      
+      const response = await axios.get(`${baseURL}/api/v1/auth/linkedin/status`, {  // Changed from /callback to /status
+        withCredentials: true,
+        headers: {
+          'User-ID': userId,
+        },
+      });
+
+      console.log("LinkedIn API response:", response.data);
+      
+      // Update connection status based on the response
+      const isConnected = response.data.status && 
+                         response.data.tokens?.hasAccessToken;
+      
+      setLinkedinConnected(isConnected);
+      
+      // Store profile info if connected
+      if (isConnected) {
+        console.log("LinkedIn connected with profile:", response.data.profile);
+        localStorage.setItem('linkedinProfile', JSON.stringify({
+          name: response.data.profile.name,
+          email: response.data.profile.email,
+          picture: response.data.profile.picture
+        }));
+      } else {
+        console.log("LinkedIn not connected");
+        localStorage.removeItem('linkedinProfile');
+      }
+
+    } catch (error) {
+      console.error('Error checking LinkedIn authentication:', error);
+      setLinkedinConnected(false);
+      localStorage.removeItem('linkedinProfile');
+    }
+  };
+  
+  checkLinkedInAuth();
+}, []);
+
   const handleLogout = async () => {
     try {
       await axios.post(
@@ -60,11 +149,11 @@ const ConnectAppsComponent = () => {
   });
 
   const handleTwitterAuth = () => {
-    setTwitterConnected(true);
+    window.location.href = `${baseURL}/api/v1/auth/twitter`;
   };
 
   const handleLinkedinAuth = () => {
-    setLinkedinConnected(true);
+    window.location.href = `${baseURL}/api/v1/auth/linkedin`;
   };
 
   const handleInstagramAuth = () => {

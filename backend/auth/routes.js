@@ -23,5 +23,7 @@ router.get(
   }),
   AuthController.linkedInCallback
 );
+router.get("/auth/twitter/status", AuthController.checkTwitterStatus);
+router.get("/auth/linkedin/status", AuthController.checkLinkedInStatus);
 
 module.exports = router;
