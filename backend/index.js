@@ -5,6 +5,7 @@ const PostRoute = require("./posts/routes");
 const startServer = require("./checkDb");
 const express = require("express");
 const passport = require("passport");
+const { startWorker } = require('./queues/worker');
 const cors = require("cors");
 const session = require('express-session');
 const cookieParser = require("cookie-parser");
@@ -32,6 +33,7 @@ app.use(passport.initialize())
 app.use(passport.session())
 
 startServer();
+startWorker()
 app.use("/api/v1", AuthRoute);
 app.use("/api/v1", WorkingRoute);
 app.use("/api/v1", PostRoute);

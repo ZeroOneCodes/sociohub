@@ -15,4 +15,6 @@
 
 5. run with docker : docker-compose up --build
 6. docker-compose down
-7. 
+
+# latest RabbitMQ 4.x
+7. docker run -it --rm --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:4-management
