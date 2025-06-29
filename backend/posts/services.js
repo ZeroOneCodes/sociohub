@@ -1,9 +1,6 @@
 require("dotenv").config();
-const axios = require("axios");
-const { oauthInstance } = require("../auth/oauth");
-const { postTwitter, postLinkedIn } = require("./functions");
+const { postTwitter, postLinkedIn } = require("./helperFunctions");
 const { connectQueue } = require('../queues/worker');
-const FormData = require('form-data');
 const fs = require('fs');
 
 const executePosts = async (

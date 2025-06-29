@@ -1,7 +1,7 @@
 require("dotenv/config");
 const amqp = require("amqplib");
 const path = require("path"); // Added missing path module
-const { postTwitter, postLinkedIn } = require("../posts/functions");
+const { postTwitter, postLinkedIn } = require("../posts/helperFunctions");
 const fs = require("fs");
 
 const QUEUE_NAME = process.env.QUEUE_NAME || "";
