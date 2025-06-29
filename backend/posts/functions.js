@@ -12,7 +12,7 @@ module.exports.postTwitter = async (
   const authToken = { key: twittertoken, secret: twittertokenSecret };
   let mediaId;
   if (mediaFile) {
-    const mediaUploadUrl = "https://upload.twitter.com/1.1/media/upload.json";
+    const mediaUploadUrl = process.env.TWITTER_MEDIA_UPLOAD_URL || '';
     const mediaHeaders = oauthInstance.toHeader(
       oauthInstance.authorize(
         {
@@ -40,7 +40,7 @@ module.exports.postTwitter = async (
     }
   }
 
-  const tweetUrl = "https://api.twitter.com/2/tweets";
+  const tweetUrl = process.env.TWEET_URL || '';
   const tweetHeaders = oauthInstance.toHeader(
     oauthInstance.authorize(
       {
@@ -94,8 +94,7 @@ module.exports.postLinkedIn = async (
 
     if (mediaFile) {
       // Handle media upload first if a file is present
-      const mediaUploadUrl =
-        "https://api.linkedin.com/v2/assets?action=registerUpload";
+      const mediaUploadUrl = process.env.LINKEDIN_MEDIA_UPLOAD_URL;
       const mediaType = mediaFile.mimetype.startsWith("image/")
         ? "IMAGE"
         : "VIDEO";
