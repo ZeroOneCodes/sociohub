@@ -61,7 +61,8 @@ module.exports.postAll = async (req, res) => {
     twitterUser.twitter_secret,
     linkedinUser.access_token,
     postContent,
-    mediaFile
+    mediaFile,
+    linkedinUser.sub
   );
   return res.status(200).json({
     success: true,

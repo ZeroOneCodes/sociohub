@@ -7,7 +7,8 @@ module.exports.executePosts = async (
   twittertokenSecret,
   linkedAccesToken,
   postContent,
-  mediaFile
+  mediaFile,
+  linkedinId
 ) => {
   let twitterResponse, linkedInResponse;
   if (postContent.postToTwitter === "true") {
