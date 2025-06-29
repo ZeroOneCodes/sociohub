@@ -128,7 +128,17 @@ const CombinedSocialPost = () => {
     setTwitterSuccess(false);
     setLinkedInSuccess(false);
 
+    // Get userId from localStorage
+    const userId = localStorage.getItem('userId');
+    if (!userId) {
+      setErrorMessage("User ID not found. Please log in again.");
+      setIsUploading(false);
+      return;
+    }
+
     const formData = new FormData();
+    formData.append("userId", userId); // Add userId to form data
+    
     if (postToLinkedIn) {
       formData.append("title", title);
       formData.append(
@@ -153,7 +163,7 @@ const CombinedSocialPost = () => {
 
     try {
       const response = await axios.post(
-        "http://localhost:3005/combined",
+        `${baseURL}/api/v1/post/all`,
         formData,
         {
           withCredentials: true,
@@ -175,11 +185,11 @@ const CombinedSocialPost = () => {
         );
       } else {
         let message = "";
-        if (response.data.linkedIn) {
+        if (response.data.data?.linkedIn) {  // Updated to match your backend response
           setLinkedInSuccess(true);
           message += "Post successful on LinkedIn! ";
         }
-        if (response.data.twitter) {
+        if (response.data.data?.twitter) {  // Updated to match your backend response
           setTwitterSuccess(true);
           message += "Post successful on Twitter!";
         }
@@ -198,7 +208,9 @@ const CombinedSocialPost = () => {
       console.error("Error posting:", error);
       if (error.response) {
         setErrorMessage(
-          error.response.data.error || "An error occurred while posting"
+          error.response.data.message || 
+          error.response.data.error || 
+          "An error occurred while posting"
         );
         if (error.response.data.details) {
           setErrorMessage(

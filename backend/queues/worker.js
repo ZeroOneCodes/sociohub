@@ -1,6 +1,7 @@
 require("dotenv/config");
 const amqp = require("amqplib");
-const { postTwitter, postLinkedIn } = require("../posts/services");
+const path = require("path"); // Added missing path module
+const { postTwitter, postLinkedIn } = require("../posts/functions");
 const fs = require("fs");
 
 const QUEUE_NAME = process.env.QUEUE_NAME || "";
@@ -34,8 +35,9 @@ module.exports.startWorker = async () => {
     console.log("✅ Worker started, waiting for messages...");
 
     channel.consume(QUEUE_NAME, async (msg) => {
+      let message; // Declare message at the start of the callback
       try {
-        const message = JSON.parse(msg.content.toString());
+        message = JSON.parse(msg.content.toString());
         const now = Date.now();
 
         // If message isn't ready to be processed yet
@@ -108,7 +110,7 @@ module.exports.startWorker = async () => {
           console.error("Max retries reached for message:", message);
 
           // Archive failed message
-          if (message.mediaPath && fs.existsSync(message.mediaPath)) {
+          if (message && message.mediaPath && fs.existsSync(message.mediaPath)) {
             const failedDir = "failed_posts";
             if (!fs.existsSync(failedDir)) {
               fs.mkdirSync(failedDir, { recursive: true });
