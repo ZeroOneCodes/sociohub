@@ -2,6 +2,8 @@ require("dotenv").config();
 const TwitterProfile = require("../models/TwitterProfile.js");
 const LinkedInProfile = require("../models/LinkedProfile.js");
 const { executePosts } = require("./services.js");
+const { uploadToR2 } = require('./r2Storage.js');
+const fs = require('fs');
 
 module.exports.postAll = async (req, res) => {
   try {
@@ -29,10 +31,10 @@ module.exports.postAll = async (req, res) => {
       });
     }
 
-    if (!content) {
+    if (!content && !mediaFile) {
       return res.status(400).json({
         success: false,
-        message: "Content is required",
+        message: "Content or media file is required",
       });
     }
 
@@ -65,6 +67,32 @@ module.exports.postAll = async (req, res) => {
       });
     }
 
+    let mediaUrl = null;
+    // Upload media to R2 if present
+    if (mediaFile) {
+      try {
+        const uploadResult = await uploadToR2(mediaFile, userId);
+        mediaUrl = uploadResult.url;
+        
+        // Clean up the temporary file
+        if (fs.existsSync(mediaFile.path)) {
+          fs.unlinkSync(mediaFile.path);
+        }
+      } catch (uploadError) {
+        console.error('R2 upload failed:', uploadError);
+        // Clean up the temporary file if upload fails
+        if (fs.existsSync(mediaFile.path)) {
+          fs.unlinkSync(mediaFile.path);
+        }
+        
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to upload media file',
+          details: uploadError.message
+        });
+      }
+    }
+
     // Prepare post content
     const postContent = {
       content,
@@ -77,6 +105,7 @@ module.exports.postAll = async (req, res) => {
       tags: rawTags,
       publishStatus,
       contentFormat,
+      mediaUrl // Include the media URL if available
     };
 
     // Execute posts
@@ -85,7 +114,7 @@ module.exports.postAll = async (req, res) => {
       twitterUser?.twitter_secret,
       linkedinUser?.access_token,
       postContent,
-      mediaFile,
+      mediaUrl, // Pass the URL instead of the file object
       linkedinUser?.sub
     );
 
