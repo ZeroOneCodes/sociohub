@@ -1,6 +1,8 @@
 require("dotenv").config();
 const TwitterProfile = require("../models/TwitterProfile.js");
 const LinkedInProfile = require("../models/LinkedProfile.js");
+const TwitterPosts = require("../models/TwitterPosts.js");
+const LinkedInPosts = require("../models/LinkedInPosts.js")
 const {
   executePosts,
   deleteTweet,
@@ -231,7 +233,40 @@ module.exports.postAll = async (req, res) => {
       linkedinUser?.sub
     );
 
-    // Clean up media file after successful posting
+    if (postToTwitter === "true" && PostResponse?.twitter?.data) {
+      const now = new Date();
+      await TwitterPosts.create({
+        user_id: userId,
+        twitter_post_id: PostResponse.twitter.data.id,
+        content: PostResponse.twitter.data.text,
+        post_created_at: now, 
+        created_at: now,
+        updated_at: now
+      });
+    }
+    if (postToTwitter === "true" && PostResponse?.data?.twitter?.data?.id) {
+      const now = new Date();
+      await TwitterPosts.create({
+        user_id: userId,
+        twitter_post_id: PostResponse.twitter.data.id,
+        content: PostResponse.twitter.data.text,
+        post_created_at: now, 
+        created_at: now,
+        updated_at: now
+      });
+    }
+    if (postToLinkedIn === "true" && PostResponse?.linkedIn?.id) {
+      const now = new Date();
+      await LinkedInPosts.create({
+        user_id: userId,
+        linkedin_post_id: PostResponse.linkedIn.id,
+        content: content,
+        post_created_at: now,
+        created_at: now,
+        updated_at: now
+      });
+    }
+
     cleanupFile(mediaFile?.path);
 
     return res.status(200).json({
