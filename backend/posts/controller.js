@@ -1,9 +1,15 @@
 require("dotenv").config();
 const TwitterProfile = require("../models/TwitterProfile.js");
 const LinkedInProfile = require("../models/LinkedProfile.js");
-const { executePosts } = require("./services.js");
-const fs = require('fs');
-const path = require('path');
+const {
+  executePosts,
+  deleteTweet,
+  getUserTweets,
+  deleteLinkedInPost,
+  getLinkedInPosts,
+} = require("./services.js");
+const fs = require("fs");
+const path = require("path");
 
 // Helper function to clean up uploaded files
 const cleanupFile = (filePath) => {
@@ -27,57 +33,82 @@ const validateMediaFile = (mediaFile, platforms) => {
 
   // Twitter validation
   if (platforms.twitter) {
-    const allowedTwitterImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    const allowedTwitterVideoTypes = ['video/mp4'];
+    const allowedTwitterImageTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/gif",
+      "image/webp",
+    ];
+    const allowedTwitterVideoTypes = ["video/mp4"];
     const maxTwitterImageSize = 5 * 1024 * 1024; // 5MB
     const maxTwitterVideoSize = 512 * 1024 * 1024; // 512MB
 
-    if (mimetype.startsWith('image/')) {
+    if (mimetype.startsWith("image/")) {
       if (!allowedTwitterImageTypes.includes(mimetype)) {
         errors.push(`Twitter doesn't support ${mimetype} images`);
       } else if (fileSize > maxTwitterImageSize) {
-        errors.push(`Image too large for Twitter (max 5MB, got ${Math.round(fileSize / 1024 / 1024)}MB)`);
+        errors.push(
+          `Image too large for Twitter (max 5MB, got ${Math.round(
+            fileSize / 1024 / 1024
+          )}MB)`
+        );
       }
-    } else if (mimetype.startsWith('video/')) {
+    } else if (mimetype.startsWith("video/")) {
       if (!allowedTwitterVideoTypes.includes(mimetype)) {
         errors.push(`Twitter doesn't support ${mimetype} videos`);
       } else if (fileSize > maxTwitterVideoSize) {
-        errors.push(`Video too large for Twitter (max 512MB, got ${Math.round(fileSize / 1024 / 1024)}MB)`);
+        errors.push(
+          `Video too large for Twitter (max 512MB, got ${Math.round(
+            fileSize / 1024 / 1024
+          )}MB)`
+        );
       }
     }
   }
 
   // LinkedIn validation
   if (platforms.linkedin) {
-    const allowedLinkedInImageTypes = ['image/jpeg', 'image/png'];
-    const allowedLinkedInVideoTypes = ['video/mp4', 'video/mpeg', 'video/quicktime'];
+    const allowedLinkedInImageTypes = ["image/jpeg", "image/png"];
+    const allowedLinkedInVideoTypes = [
+      "video/mp4",
+      "video/mpeg",
+      "video/quicktime",
+    ];
     const maxLinkedInImageSize = 8 * 1024 * 1024; // 8MB
     const maxLinkedInVideoSize = 200 * 1024 * 1024; // 200MB
 
-    if (mimetype.startsWith('image/')) {
+    if (mimetype.startsWith("image/")) {
       if (!allowedLinkedInImageTypes.includes(mimetype)) {
         errors.push(`LinkedIn doesn't support ${mimetype} images`);
       } else if (fileSize > maxLinkedInImageSize) {
-        errors.push(`Image too large for LinkedIn (max 8MB, got ${Math.round(fileSize / 1024 / 1024)}MB)`);
+        errors.push(
+          `Image too large for LinkedIn (max 8MB, got ${Math.round(
+            fileSize / 1024 / 1024
+          )}MB)`
+        );
       }
-    } else if (mimetype.startsWith('video/')) {
+    } else if (mimetype.startsWith("video/")) {
       if (!allowedLinkedInVideoTypes.includes(mimetype)) {
         errors.push(`LinkedIn doesn't support ${mimetype} videos`);
       } else if (fileSize > maxLinkedInVideoSize) {
-        errors.push(`Video too large for LinkedIn (max 200MB, got ${Math.round(fileSize / 1024 / 1024)}MB)`);
+        errors.push(
+          `Video too large for LinkedIn (max 200MB, got ${Math.round(
+            fileSize / 1024 / 1024
+          )}MB)`
+        );
       }
     }
   }
 
   return {
     valid: errors.length === 0,
-    errors: errors
+    errors: errors,
   };
 };
 
 module.exports.postAll = async (req, res) => {
   let mediaFile = null;
-  
+
   try {
     const {
       userId,
@@ -96,13 +127,13 @@ module.exports.postAll = async (req, res) => {
     mediaFile = req.file;
 
     // Log request details for debugging
-    console.log('Post request received:', {
+    console.log("Post request received:", {
       userId,
       postToTwitter,
       postToLinkedIn,
       hasMediaFile: !!mediaFile,
       mediaType: mediaFile?.mimetype,
-      mediaSize: mediaFile ? fs.statSync(mediaFile.path).size : 0
+      mediaSize: mediaFile ? fs.statSync(mediaFile.path).size : 0,
     });
 
     // Validate required fields
@@ -121,7 +152,7 @@ module.exports.postAll = async (req, res) => {
     }
 
     // Check if at least one platform is selected
-    if (postToTwitter !== 'true' && postToLinkedIn !== 'true') {
+    if (postToTwitter !== "true" && postToLinkedIn !== "true") {
       return res.status(400).json({
         success: false,
         message: "At least one platform (Twitter or LinkedIn) must be selected",
@@ -131,8 +162,8 @@ module.exports.postAll = async (req, res) => {
     // Validate media file for selected platforms
     if (mediaFile) {
       const validation = validateMediaFile(mediaFile, {
-        twitter: postToTwitter === 'true',
-        linkedin: postToLinkedIn === 'true'
+        twitter: postToTwitter === "true",
+        linkedin: postToLinkedIn === "true",
       });
 
       if (!validation.valid) {
@@ -140,31 +171,37 @@ module.exports.postAll = async (req, res) => {
         return res.status(400).json({
           success: false,
           message: "Media file validation failed",
-          errors: validation.errors
+          errors: validation.errors,
         });
       }
     }
 
     // Find user accounts
     const [twitterUser, linkedinUser] = await Promise.all([
-      postToTwitter === 'true' ? TwitterProfile.findOne({ where: { user_id: userId } }) : null,
-      postToLinkedIn === 'true' ? LinkedInProfile.findOne({ where: { user_id: userId } }) : null
+      postToTwitter === "true"
+        ? TwitterProfile.findOne({ where: { user_id: userId } })
+        : null,
+      postToLinkedIn === "true"
+        ? LinkedInProfile.findOne({ where: { user_id: userId } })
+        : null,
     ]);
 
     // Validate platform connections
-    if (postToTwitter === 'true' && !twitterUser) {
+    if (postToTwitter === "true" && !twitterUser) {
       cleanupFile(mediaFile?.path);
       return res.status(400).json({
         success: false,
-        message: "Twitter account not found. Please connect your Twitter account",
+        message:
+          "Twitter account not found. Please connect your Twitter account",
       });
     }
 
-    if (postToLinkedIn === 'true' && !linkedinUser) {
+    if (postToLinkedIn === "true" && !linkedinUser) {
       cleanupFile(mediaFile?.path);
       return res.status(400).json({
         success: false,
-        message: "LinkedIn account not found. Please connect your LinkedIn account",
+        message:
+          "LinkedIn account not found. Please connect your LinkedIn account",
       });
     }
 
@@ -182,7 +219,7 @@ module.exports.postAll = async (req, res) => {
       contentFormat,
     };
 
-    console.log('Executing posts with content:', postContent);
+    console.log("Executing posts with content:", postContent);
 
     // Execute posts
     const PostResponse = await executePosts(
@@ -202,30 +239,30 @@ module.exports.postAll = async (req, res) => {
       message: "Post operation completed successfully",
       data: PostResponse,
     });
-
   } catch (error) {
-    console.error('Error in postAll:', error);
-    
+    console.error("Error in postAll:", error);
+
     // Clean up media file in case of error
     cleanupFile(mediaFile?.path);
 
     // Determine error message and status code
     let statusCode = 500;
-    let message = 'An error occurred while processing your post';
-    
-    if (error.message?.includes('Media validation failed')) {
+    let message = "An error occurred while processing your post";
+
+    if (error.message?.includes("Media validation failed")) {
       statusCode = 400;
       message = error.message;
-    } else if (error.message?.includes('Media upload failed')) {
+    } else if (error.message?.includes("Media upload failed")) {
       statusCode = 400;
-      message = 'Media upload failed. Please check your file and try again.';
-    } else if (error.message?.includes('Tweet posting failed')) {
+      message = "Media upload failed. Please check your file and try again.";
+    } else if (error.message?.includes("Tweet posting failed")) {
       statusCode = 400;
-      message = 'Failed to post to Twitter. Please check your account connection.';
-    } else if (error.message?.includes('not found')) {
+      message =
+        "Failed to post to Twitter. Please check your account connection.";
+    } else if (error.message?.includes("not found")) {
       statusCode = 404;
       message = error.message;
-    } else if (error.message?.includes('account not found')) {
+    } else if (error.message?.includes("account not found")) {
       statusCode = 400;
       message = error.message;
     }
@@ -233,8 +270,180 @@ module.exports.postAll = async (req, res) => {
     return res.status(statusCode).json({
       success: false,
       message: message,
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
-      error_code: error.code || 'UNKNOWN_ERROR'
+      details:
+        process.env.NODE_ENV === "development" ? error.message : undefined,
+      error_code: error.code || "UNKNOWN_ERROR",
+    });
+  }
+};
+
+module.exports.deleteTweet = async (req, res) => {
+  const { userId, tweetId } = req.body;
+  console.log("t", tweetId);
+  try {
+    const twitterProfile = await TwitterProfile.findOne({
+      where: { user_id: userId },
+    });
+
+    if (!twitterProfile) {
+      return res.status(404).json({
+        status: false,
+        message: "Twitter profile not found for this user",
+      });
+    }
+
+    if (!twitterProfile.twitter_token || !twitterProfile.twitter_secret) {
+      return res.status(400).json({
+        status: false,
+        message: "Twitter credentials not found for this user",
+      });
+    }
+
+    await deleteTweet(
+      tweetId,
+      twitterProfile.twitter_token,
+      twitterProfile.twitter_secret
+    );
+
+    res.json({
+      status: true,
+      message: `Successfully deleted Tweet ID: ${tweetId}`,
+    });
+  } catch (error) {
+    console.error("Delete tweet error:", error);
+    const errorMessage =
+      error.errors?.[0]?.message ||
+      error.detail ||
+      error.message ||
+      "Failed to delete tweet";
+
+    res.status(500).json({
+      status: false,
+      message: errorMessage,
+      error: error.errors || error.detail || error.message,
+    });
+  }
+};
+
+module.exports.getUserTweets = async (req, res) => {
+  try {
+    const { userId } = req.body;
+    const twitterProfile = await TwitterProfile.findOne({
+      where: { user_id: userId },
+    });
+
+    if (!twitterProfile) {
+      return res.status(404).json({
+        status: false,
+        message: "Twitter profile not found",
+      });
+    }
+
+    const tid = twitterProfile.twitter_token.split("-")[0];
+
+    const tweets = await getUserTweets(
+      tid,
+      twitterProfile.twitter_token,
+      twitterProfile.twitter_secret
+    );
+
+    res.json({
+      status: true,
+      data: tweets,
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: false,
+      message: error.message,
+    });
+  }
+};
+
+module.exports.deleteLinkedInPost = async (req, res) => {
+  const { userId, postId } = req.body;
+
+  try {
+    const linkedinProfile = await LinkedInProfile.findOne({
+      where: { user_id: userId },
+    });
+
+    if (!linkedinProfile) {
+      return res.status(404).json({
+        status: false,
+        message: "LinkedIn profile not found for this user",
+      });
+    }
+
+    if (!linkedinProfile.access_token) {
+      return res.status(400).json({
+        status: false,
+        message: "LinkedIn credentials not found for this user",
+      });
+    }
+
+    await deleteLinkedInPost(postId, linkedinProfile.access_token);
+
+    res.json({
+      status: true,
+      message: `Successfully deleted LinkedIn Post ID: ${postId}`,
+    });
+  } catch (error) {
+    console.error("Delete LinkedIn post error:", error);
+    const errorMessage =
+      error.errors?.[0]?.message ||
+      error.detail ||
+      error.message ||
+      "Failed to delete LinkedIn post";
+
+    res.status(500).json({
+      status: false,
+      message: errorMessage,
+      error: error.errors || error.detail || error.message,
+    });
+  }
+};
+
+module.exports.getLinkedInPosts = async (req, res) => {
+  const { userId } = req.body;
+
+  try {
+    const linkedinProfile = await LinkedInProfile.findOne({
+      where: { user_id: userId },
+    });
+
+    if (!linkedinProfile) {
+      return res.status(404).json({
+        status: false,
+        message: "LinkedIn profile not found for this user",
+      });
+    }
+
+    if (!linkedinProfile.access_token) {
+      return res.status(400).json({
+        status: false,
+        message: "LinkedIn credentials not found for this user",
+      });
+    }
+    console.log("linkedinProfile.access_token", linkedinProfile.access_token);
+    const posts = await getLinkedInPosts(linkedinProfile.access_token);
+
+    res.json({
+      status: true,
+      message: "Successfully fetched LinkedIn posts",
+      data: posts,
+    });
+  } catch (error) {
+    console.error("Get LinkedIn posts error:", error);
+    const errorMessage =
+      error.errors?.[0]?.message ||
+      error.detail ||
+      error.message ||
+      "Failed to fetch LinkedIn posts";
+
+    res.status(500).json({
+      status: false,
+      message: errorMessage,
+      error: error.errors || error.detail || error.message,
     });
   }
 };

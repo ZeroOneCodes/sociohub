@@ -10,5 +10,9 @@ router.post(
   handleMulterError,
   PostController.postAll
 );
+router.post("/deleteTweet/:id", PostController.deleteTweet);
+router.get("/gettweeterPosts", PostController.getUserTweets);
+router.post("/deleteLinkedInPost", PostController.deleteLinkedInPost);
+router.get("/getlinkedinPosts", PostController.getLinkedInPosts);
 
 module.exports = router;
