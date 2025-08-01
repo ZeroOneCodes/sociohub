@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const passport = require("passport");
 const router = express.Router();
+const { verifyAccessToken } = require("./middleware")
 const AuthController = require("./controller");
 
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || "";
@@ -26,7 +27,7 @@ router.get(
   }),
   AuthController.linkedInCallback
 );
-router.get("/auth/twitter/status", AuthController.checkTwitterStatus);
-router.get("/auth/linkedin/status", AuthController.checkLinkedInStatus);
+router.get("/auth/twitter/status", verifyAccessToken, AuthController.checkTwitterStatus);
+router.get("/auth/linkedin/status", verifyAccessToken, AuthController.checkLinkedInStatus);
 
 module.exports = router;
