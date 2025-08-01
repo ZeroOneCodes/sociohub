@@ -128,8 +128,7 @@ const CombinedSocialPost = () => {
     setTwitterSuccess(false);
     setLinkedInSuccess(false);
 
-    // Get userId from localStorage
-    const userId = localStorage.getItem('userId');
+    const userId = localStorage.getItem("userId");
     if (!userId) {
       setErrorMessage("User ID not found. Please log in again.");
       setIsUploading(false);
@@ -137,8 +136,8 @@ const CombinedSocialPost = () => {
     }
 
     const formData = new FormData();
-    formData.append("userId", userId); // Add userId to form data
-    
+    formData.append("userId", userId);
+
     if (postToLinkedIn) {
       formData.append("title", title);
       formData.append(
@@ -162,22 +161,21 @@ const CombinedSocialPost = () => {
     }
 
     try {
-      const response = await axios.post(
-        `${baseURL}/api/v1/post/all`,
-        formData,
-        {
-          withCredentials: true,
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-          onUploadProgress: (progressEvent) => {
-            const percentCompleted = Math.round(
-              (progressEvent.loaded * 100) / progressEvent.total
-            );
-            setUploadProgress(percentCompleted);
-          },
-        }
-      );
+      let accessToken = sessionStorage.getItem("accessToken");
+
+      let response = await axios.post(`${baseURL}/api/v1/post/all`, formData, {
+        withCredentials: true,
+        headers: {
+          "Content-Type": "multipart/form-data",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round(
+            (progressEvent.loaded * 100) / progressEvent.total
+          );
+          setUploadProgress(percentCompleted);
+        },
+      });
 
       if (isScheduled) {
         setSuccessMessage(
@@ -185,18 +183,17 @@ const CombinedSocialPost = () => {
         );
       } else {
         let message = "";
-        if (response.data.data?.linkedIn) {  // Updated to match your backend response
+        if (response.data.data?.linkedIn) {
           setLinkedInSuccess(true);
           message += "Post successful on LinkedIn! ";
         }
-        if (response.data.data?.twitter) {  // Updated to match your backend response
+        if (response.data.data?.twitter) {
           setTwitterSuccess(true);
           message += "Post successful on Twitter!";
         }
         setSuccessMessage(message.trim());
       }
 
-      // Reset form
       setTitle("");
       setContent("");
       setTags("");
@@ -205,24 +202,85 @@ const CombinedSocialPost = () => {
       setScheduleDate("");
       setScheduleTime("");
     } catch (error) {
-      console.error("Error posting:", error);
-      if (error.response) {
-        setErrorMessage(
-          error.response.data.message || 
-          error.response.data.error || 
-          "An error occurred while posting"
-        );
-        if (error.response.data.details) {
-          setErrorMessage(
-            (prev) => `${prev}. Details: ${error.response.data.details}`
+      if (
+        error.response &&
+        (error.response.status === 401 || error.response.status === 403)
+      ) {
+        try {
+          const refreshResponse = await axios.post(
+            `${baseURL}/api/v1/auth/refresh-token`,
+            {},
+            { withCredentials: true }
           );
+
+          const newAccessToken = refreshResponse.data.accessToken;
+          sessionStorage.setItem("accessToken", newAccessToken);
+          const retryResponse = await axios.post(
+            `${baseURL}/api/v1/post/all`,
+            formData,
+            {
+              withCredentials: true,
+              headers: {
+                "Content-Type": "multipart/form-data",
+                Authorization: `Bearer ${newAccessToken}`,
+              },
+              onUploadProgress: (progressEvent) => {
+                const percentCompleted = Math.round(
+                  (progressEvent.loaded * 100) / progressEvent.total
+                );
+                setUploadProgress(percentCompleted);
+              },
+            }
+          );
+          if (isScheduled) {
+            setSuccessMessage(
+              `Post scheduled for ${scheduleDate} at ${scheduleTime}`
+            );
+          } else {
+            let message = "";
+            if (retryResponse.data.data?.linkedIn) {
+              setLinkedInSuccess(true);
+              message += "Post successful on LinkedIn! ";
+            }
+            if (retryResponse.data.data?.twitter) {
+              setTwitterSuccess(true);
+              message += "Post successful on Twitter!";
+            }
+            setSuccessMessage(message.trim());
+          }
+
+          setTitle("");
+          setContent("");
+          setTags("");
+          removeMedia();
+          setIsScheduled(false);
+          setScheduleDate("");
+          setScheduleTime("");
+        } catch (refreshError) {
+          console.error("Token refresh failed:", refreshError);
+          setErrorMessage("Session expired. Please log in again.");
+          sessionStorage.removeItem("accessToken");
+          localStorage.removeItem("userId");
         }
-      } else if (error.request) {
-        setErrorMessage(
-          "No response received from the server. Check your network connection."
-        );
       } else {
-        setErrorMessage("Error setting up the request. Please try again.");
+        if (error.response) {
+          setErrorMessage(
+            error.response.data.message ||
+              error.response.data.error ||
+              "An error occurred while posting"
+          );
+          if (error.response.data.details) {
+            setErrorMessage(
+              (prev) => `${prev}. Details: ${error.response.data.details}`
+            );
+          }
+        } else if (error.request) {
+          setErrorMessage(
+            "No response received from the server. Check your network connection."
+          );
+        } else {
+          setErrorMessage("Error setting up the request. Please try again.");
+        }
       }
     } finally {
       setIsUploading(false);

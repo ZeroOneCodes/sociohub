@@ -9,6 +9,7 @@ const { startWorker } = require("./queues/worker");
 const cors = require("cors");
 const session = require("express-session");
 const cookieParser = require("cookie-parser");
+const { verifyAccessToken } = require("../backend/auth/middleware")
 require("./auth/passport");
 const app = express();
 
@@ -39,8 +40,8 @@ app.use(passport.session());
 startServer();
 startWorker();
 app.use("/api/v1", AuthRoute);
-app.use("/api/v1", WorkingRoute);
-app.use("/api/v1", PostRoute);
+app.use("/api/v1", verifyAccessToken, WorkingRoute);
+app.use("/api/v1", verifyAccessToken, PostRoute);
 
 app.listen(process.env.PORT, () => {
   console.log(`Server connected at http://localhost:${process.env.PORT}`);

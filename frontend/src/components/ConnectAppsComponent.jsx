@@ -1,4 +1,4 @@
-import { useState,useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   Twitter,
   Linkedin,
@@ -33,92 +33,267 @@ const ConnectAppsComponent = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-  const checkTwitterAuth = async () => {
-    try {
-      const userId = localStorage.getItem('userId');
-      console.log("Checking Twitter status for user:", userId);
-      
-      const response = await axios.get(`${baseURL}/api/v1/auth/twitter/status`, {
-        withCredentials: true,
-        headers: {
-          'User-ID': userId,
-        },
-      });
+    const checkTwitterAuth = async () => {
+      try {
+        const userId = localStorage.getItem("userId");
 
-      console.log("Twitter API response:", response.data);
-      
-      // Update connection status based on the new response format
-      const isConnected = response.data.status && 
-                         response.data.tokens?.hasToken && 
-                         response.data.tokens?.hasSecret;
-      
-      setTwitterConnected(isConnected);
-      
-      // Store profile info if connected
-      if (isConnected) {
-        console.log("Twitter connected with profile:", response.data.profile);
-        localStorage.setItem('twitterProfile', JSON.stringify({
-          name: response.data.profile.name,
-          screenName: response.data.profile.screen_name
-        }));
-      } else {
-        console.log("Twitter not connected");
-        localStorage.removeItem('twitterProfile');
+        if (!userId) {
+          console.log("No user ID found");
+          setTwitterConnected(false);
+          localStorage.removeItem("twitterProfile");
+          return;
+        }
+        let accessToken = sessionStorage.getItem("accessToken");
+
+        let response = await axios.get(
+          `${baseURL}/api/v1/auth/twitter/status`,
+          {
+            withCredentials: true,
+            headers: {
+              "User-ID": userId,
+              Authorization: `Bearer ${accessToken}`,
+            },
+          }
+        );
+
+        const isConnected =
+          response.data.status &&
+          response.data.tokens?.hasToken &&
+          response.data.tokens?.hasSecret;
+
+        setTwitterConnected(isConnected);
+
+        if (isConnected) {
+          localStorage.setItem(
+            "twitterProfile",
+            JSON.stringify({
+              name: response.data.profile.name,
+              screenName: response.data.profile.screen_name,
+            })
+          );
+        } else {
+          localStorage.removeItem("twitterProfile");
+        }
+      } catch (error) {
+        if (
+          error.response &&
+          (error.response.status === 401 || error.response.status === 403)
+        ) {
+          console.log(
+            "Token expired during Twitter auth check, attempting to refresh..."
+          );
+
+          try {
+            const refreshResponse = await axios.post(
+              `${baseURL}/api/v1/auth/refresh-token`,
+              {},
+              { withCredentials: true }
+            );
+
+            const newAccessToken = refreshResponse.data.accessToken;
+            sessionStorage.setItem("accessToken", newAccessToken);
+
+            const userId = localStorage.getItem("userId");
+            const retryResponse = await axios.get(
+              `${baseURL}/api/v1/auth/twitter/status`,
+              {
+                withCredentials: true,
+                headers: {
+                  "User-ID": userId,
+                  Authorization: `Bearer ${newAccessToken}`,
+                },
+              }
+            );
+
+            const isConnected =
+              retryResponse.data.status &&
+              retryResponse.data.tokens?.hasToken &&
+              retryResponse.data.tokens?.hasSecret;
+
+            setTwitterConnected(isConnected);
+
+            if (isConnected) {
+              localStorage.setItem(
+                "twitterProfile",
+                JSON.stringify({
+                  name: retryResponse.data.profile.name,
+                  screenName: retryResponse.data.profile.screen_name,
+                })
+              );
+            } else {
+              localStorage.removeItem("twitterProfile");
+            }
+          } catch (refreshError) {
+            console.error(
+              "Token refresh failed during Twitter auth check:",
+              refreshError
+            );
+            setTwitterConnected(false);
+            localStorage.removeItem("twitterProfile");
+
+            // Optionally, you might want to redirect to login or show a message
+            // sessionStorage.removeItem('accessToken');
+            // localStorage.removeItem('userId');
+            // navigate('/login');
+          }
+        } else {
+          setTwitterConnected(false);
+          localStorage.removeItem("twitterProfile");
+        }
       }
+    };
 
-    } catch (error) {
-      console.error('Error checking Twitter authentication:', error);
-      setTwitterConnected(false);
-      localStorage.removeItem('twitterProfile');
-    }
-  };
-  
-  checkTwitterAuth();
-}, []);
+    checkTwitterAuth();
+  }, []);
 
   useEffect(() => {
-  const checkLinkedInAuth = async () => {
-    try {
-      const userId = localStorage.getItem('userId');
-      console.log("Checking LinkedIn status for user:", userId);
-      
-      const response = await axios.get(`${baseURL}/api/v1/auth/linkedin/status`, {  // Changed from /callback to /status
-        withCredentials: true,
-        headers: {
-          'User-ID': userId,
-        },
-      });
+    const checkLinkedInAuth = async () => {
+      try {
+        const userId = localStorage.getItem("userId");
+        console.log("Checking LinkedIn status for user:", userId);
 
-      console.log("LinkedIn API response:", response.data);
-      
-      // Update connection status based on the response
-      const isConnected = response.data.status && 
-                         response.data.tokens?.hasAccessToken;
-      
-      setLinkedinConnected(isConnected);
-      
-      // Store profile info if connected
-      if (isConnected) {
-        console.log("LinkedIn connected with profile:", response.data.profile);
-        localStorage.setItem('linkedinProfile', JSON.stringify({
-          name: response.data.profile.name,
-          email: response.data.profile.email,
-          picture: response.data.profile.picture
-        }));
-      } else {
-        console.log("LinkedIn not connected");
-        localStorage.removeItem('linkedinProfile');
+        if (!userId) {
+          console.log("No user ID found");
+          setLinkedinConnected(false);
+          localStorage.removeItem("linkedinProfile");
+          return;
+        }
+
+        // Get access token from session storage
+        let accessToken = sessionStorage.getItem("accessToken");
+
+        // First attempt
+        let response = await axios.get(
+          `${baseURL}/api/v1/auth/linkedin/status`,
+          {
+            withCredentials: true,
+            headers: {
+              "User-ID": userId,
+              Authorization: `Bearer ${accessToken}`,
+            },
+          }
+        );
+
+        console.log("LinkedIn API response:", response.data);
+
+        // Update connection status based on the response
+        const isConnected =
+          response.data.status && response.data.tokens?.hasAccessToken;
+
+        setLinkedinConnected(isConnected);
+
+        // Store profile info if connected
+        if (isConnected) {
+          console.log(
+            "LinkedIn connected with profile:",
+            response.data.profile
+          );
+          localStorage.setItem(
+            "linkedinProfile",
+            JSON.stringify({
+              name: response.data.profile.name,
+              email: response.data.profile.email,
+              picture: response.data.profile.picture,
+            })
+          );
+        } else {
+          console.log("LinkedIn not connected");
+          localStorage.removeItem("linkedinProfile");
+        }
+      } catch (error) {
+        console.error("Error checking LinkedIn authentication:", error);
+
+        // Check if the error is 401 or 403 (token expired)
+        if (
+          error.response &&
+          (error.response.status === 401 || error.response.status === 403)
+        ) {
+          console.log(
+            "Token expired during LinkedIn auth check, attempting to refresh..."
+          );
+
+          try {
+            // Attempt to refresh the token
+            const refreshResponse = await axios.post(
+              `${baseURL}/api/v1/auth/refresh-token`,
+              {}, // Empty body since you're using cookies
+              { withCredentials: true }
+            );
+
+            // Update the access token in session storage
+            const newAccessToken = refreshResponse.data.accessToken;
+            sessionStorage.setItem("accessToken", newAccessToken);
+            console.log(
+              "Token refreshed successfully, retrying LinkedIn auth check..."
+            );
+
+            // Retry the LinkedIn auth check with the new token
+            const userId = localStorage.getItem("userId");
+            const retryResponse = await axios.get(
+              `${baseURL}/api/v1/auth/linkedin/status`,
+              {
+                withCredentials: true,
+                headers: {
+                  "User-ID": userId,
+                  Authorization: `Bearer ${newAccessToken}`,
+                },
+              }
+            );
+
+            console.log(
+              "LinkedIn API response after refresh:",
+              retryResponse.data
+            );
+
+            // Update connection status based on the response
+            const isConnected =
+              retryResponse.data.status &&
+              retryResponse.data.tokens?.hasAccessToken;
+
+            setLinkedinConnected(isConnected);
+
+            // Store profile info if connected
+            if (isConnected) {
+              console.log(
+                "LinkedIn connected with profile:",
+                retryResponse.data.profile
+              );
+              localStorage.setItem(
+                "linkedinProfile",
+                JSON.stringify({
+                  name: retryResponse.data.profile.name,
+                  email: retryResponse.data.profile.email,
+                  picture: retryResponse.data.profile.picture,
+                })
+              );
+            } else {
+              console.log("LinkedIn not connected");
+              localStorage.removeItem("linkedinProfile");
+            }
+          } catch (refreshError) {
+            console.error(
+              "Token refresh failed during LinkedIn auth check:",
+              refreshError
+            );
+            // If refresh fails, user needs to login again
+            setLinkedinConnected(false);
+            localStorage.removeItem("linkedinProfile");
+
+            // Optionally, you might want to redirect to login or show a message
+            // sessionStorage.removeItem('accessToken');
+            // localStorage.removeItem('userId');
+            // navigate('/login');
+          }
+        } else {
+          // Handle other types of errors
+          setLinkedinConnected(false);
+          localStorage.removeItem("linkedinProfile");
+        }
       }
+    };
 
-    } catch (error) {
-      console.error('Error checking LinkedIn authentication:', error);
-      setLinkedinConnected(false);
-      localStorage.removeItem('linkedinProfile');
-    }
-  };
-  
-  checkLinkedInAuth();
-}, []);
+    checkLinkedInAuth();
+  }, []);
 
   const handleLogout = async () => {
     try {
