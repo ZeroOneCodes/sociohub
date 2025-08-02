@@ -22,7 +22,7 @@ const ProtectedRoute = ({ children }) => {
 
         // Verify token with backend
         //await makeAuthenticatedRequest('/api/v1/auth/refre');
-
+        <Navigate to="/postboth" replace />
         setIsAuthenticated(true);
       } catch (error) {
         console.error("Authentication check failed:", error);
@@ -92,8 +92,13 @@ const ProtectedRoute = ({ children }) => {
     );
   }
 
-  if (!isAuthenticated) {
+  if (isAuthenticated === false) {
     return <Navigate to="/login" replace />;
+  }
+
+  // If authenticated, redirect to /postboth if on home route
+  if (isAuthenticated && window.location.pathname === '/') {
+    return <Navigate to="/postboth" replace />;
   }
   return children;
 };

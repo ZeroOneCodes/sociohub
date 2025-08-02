@@ -9,9 +9,18 @@ const { startWorker } = require("./queues/worker");
 const cors = require("cors");
 const session = require("express-session");
 const cookieParser = require("cookie-parser");
-const { verifyAccessToken } = require("../backend/auth/middleware")
+const { verifyAccessToken } = require("../backend/auth/middleware");
+const rateLimit = require("express-rate-limit");
 require("./auth/passport");
 const app = express();
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: "Too many requests from this IP, please try again after 15 minutes",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 app.use(
   cors({
@@ -30,7 +39,7 @@ app.use(
     cookie: {
       secure: false,
       httpOnly: true,
-      maxAge: 1000 * 60 * 60 * 24, // 1 day
+      maxAge: 1000 * 60 * 60 * 24,
     },
   })
 );
@@ -39,6 +48,7 @@ app.use(passport.session());
 
 startServer();
 startWorker();
+app.use("/api/v1", apiLimiter); 
 app.use("/api/v1", AuthRoute);
 app.use("/api/v1", verifyAccessToken, WorkingRoute);
 app.use("/api/v1", verifyAccessToken, PostRoute);
