@@ -20,7 +20,7 @@ module.exports.generateAccessToken = (user) => {
   return jwt.sign(
     { userId: user.user_id, role: user.role },
     ACCESS_TOKEN_SECRET,
-    { expiresIn: "1m" }
+    { expiresIn: "15m" }
   );
 };
 
