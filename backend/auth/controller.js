@@ -2,9 +2,13 @@ require("dotenv").config();
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const Users = require("../models/Users");
-const { generateAccessToken, generateRefreshToken } = require("./jwt");
-const TwitterProfile = require('../models/TwitterProfile.js');
-const LinkedInProfile = require('../models/LinkedProfile.js');
+const {
+  generateAccessToken,
+  generateRefreshToken,
+  generateSilentToken,
+} = require("./jwt");
+const TwitterProfile = require("../models/TwitterProfile.js");
+const LinkedInProfile = require("../models/LinkedProfile.js");
 
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || "";
 
@@ -28,12 +32,20 @@ module.exports.signup = async (req, res) => {
 
     const accessToken = generateAccessToken(user);
     const refreshToken = generateRefreshToken(user);
+    const silentToken = generateSilentToken(user);
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "development",
       sameSite: "strict",
       maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    res.cookie("silentToken", silentToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "development",
+      sameSite: "strict",
+      maxAge: 30 * 24 * 60 * 60 * 1000,
     });
 
     res.status(201).json({
@@ -68,12 +80,20 @@ module.exports.login = async (req, res) => {
 
     const accessToken = generateAccessToken(user);
     const refreshToken = generateRefreshToken(user);
+    const silentToken = generateSilentToken(user);
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "development",
       sameSite: "strict",
       maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    res.cookie("silentToken", silentToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "development",
+      sameSite: "strict",
+      maxAge: 30 * 24 * 60 * 60 * 1000,
     });
 
     res.status(200).json({
@@ -86,6 +106,41 @@ module.exports.login = async (req, res) => {
   } catch (err) {
     console.error("Login Error:", err);
     res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+module.exports.silentAuth = async (req, res) => {
+  try {
+    const silentToken = req.cookies.silentToken;
+    if (!silentToken) {
+      return res.status(401).json({ message: "No silent token found" });
+    }
+
+    const decoded = jwt.verify(silentToken, process.env.SILENT_TOKEN_SECRET);
+
+    const user = await Users.findOne({ where: { user_id: decoded.userId } });
+    if (!user) {
+      return res.status(401).json({ message: "User not found" });
+    }
+    const newAccessToken = generateAccessToken(user);
+    const newRefreshToken = generateRefreshToken(user);
+
+    res.cookie("refreshToken", newRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "development",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    res.status(200).json({
+      accessToken: newAccessToken,
+      user: {
+        id: user.user_id,
+      },
+    });
+  } catch (err) {
+    console.error("Silent auth error:", err);
+    res.status(401).json({ message: "Silent authentication failed" });
   }
 };
 
@@ -123,8 +178,14 @@ module.exports.logout = async (req, res) => {
       sameSite: "strict",
     });
 
+    res.clearCookie("silentToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "development",
+      sameSite: "strict",
+    });
+
     res.status(200).json({
-      message: "Logout successful"
+      message: "Logout successful",
     });
   } catch (err) {
     console.error("Logout Error:", err);
@@ -142,31 +203,32 @@ module.exports.linkedInCallback = (req, res) => {
 
 module.exports.checkTwitterStatus = async (req, res) => {
   try {
-    const userId = req.headers['user-id'];
-    
+    const userId = req.headers["user-id"];
+
     if (!userId) {
-      return res.status(400).json({ 
-        error: 'User ID is required' 
+      return res.status(400).json({
+        error: "User ID is required",
       });
     }
 
     // Find the Twitter profile for this user
-    const twitterProfile = await TwitterProfile.findOne({ 
-      where: { user_id: userId } 
+    const twitterProfile = await TwitterProfile.findOne({
+      where: { user_id: userId },
     });
 
     if (!twitterProfile) {
-      return res.json({ 
+      return res.json({
         connected: false,
-        message: 'No Twitter profile found for this user'
+        message: "No Twitter profile found for this user",
       });
     }
 
     // Check if tokens exist
-    const hasTokens = twitterProfile.twitter_token && twitterProfile.twitter_secret;
+    const hasTokens =
+      twitterProfile.twitter_token && twitterProfile.twitter_secret;
 
     res.json({
-      status:true,
+      status: true,
       profile: {
         name: twitterProfile.name,
         screen_name: twitterProfile.screen_name,
@@ -174,37 +236,36 @@ module.exports.checkTwitterStatus = async (req, res) => {
       },
       tokens: {
         hasToken: !!twitterProfile.twitter_token,
-        hasSecret: !!twitterProfile.twitter_secret
-      }
+        hasSecret: !!twitterProfile.twitter_secret,
+      },
     });
-
   } catch (error) {
-    console.error('Error checking Twitter status:', error);
-    res.status(500).json({ 
-      error: 'Failed to check Twitter connection status',
-      details: error.message 
+    console.error("Error checking Twitter status:", error);
+    res.status(500).json({
+      error: "Failed to check Twitter connection status",
+      details: error.message,
     });
   }
 };
 
 module.exports.checkLinkedInStatus = async (req, res) => {
   try {
-    const userId = req.headers['user-id'];
-    
+    const userId = req.headers["user-id"];
+
     if (!userId) {
-      return res.status(400).json({ 
-        error: 'User ID is required' 
+      return res.status(400).json({
+        error: "User ID is required",
       });
     }
 
-    const linkedInProfile = await LinkedInProfile.findOne({ 
-      where: { user_id: userId } 
+    const linkedInProfile = await LinkedInProfile.findOne({
+      where: { user_id: userId },
     });
 
     if (!linkedInProfile) {
-      return res.json({ 
+      return res.json({
         connected: false,
-        message: 'No LinkedIn profile found for this user'
+        message: "No LinkedIn profile found for this user",
       });
     }
 
@@ -213,21 +274,18 @@ module.exports.checkLinkedInStatus = async (req, res) => {
       profile: {
         name: linkedInProfile.name,
         email: linkedInProfile.email,
-        picture: linkedInProfile.picture
+        picture: linkedInProfile.picture,
       },
       tokens: {
         hasAccessToken: !!linkedInProfile.access_token,
-        hasRefreshToken: !!linkedInProfile.refresh_token
-      }
+        hasRefreshToken: !!linkedInProfile.refresh_token,
+      },
     });
-
   } catch (error) {
-    console.error('Error checking LinkedIn status:', error);
-    res.status(500).json({ 
-      error: 'Failed to check LinkedIn connection status',
-      details: error.message 
+    console.error("Error checking LinkedIn status:", error);
+    res.status(500).json({
+      error: "Failed to check LinkedIn connection status",
+      details: error.message,
     });
   }
 };
-
-

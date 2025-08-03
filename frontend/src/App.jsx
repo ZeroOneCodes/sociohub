@@ -16,13 +16,28 @@ import OAuthLogin from "./components/OAuthLogin";
 import CombinedSocialPost from "./components/CombinedSocialPost";
 import ConnectAppsComponent from "./components/ConnectAppsComponent";
 import ProtectedRoute from "./components/ProtectedRoute";
+import LoginRedirect from "./components/LoginRedirect"; // Add this import
 
 function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/login" element={<Login />} />
+        <Route
+          path="/"
+          element={
+            <LoginRedirect>
+              <Home />
+            </LoginRedirect>
+          }
+        />
+        <Route
+          path="/login"
+          element={
+            <LoginRedirect>
+              <Login />
+            </LoginRedirect>
+          }
+        />
         <Route path="/signup" element={<Signup />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/terms" element={<Terms />} />

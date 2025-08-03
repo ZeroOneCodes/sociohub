@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Navigate } from "react-router-dom";
 import axios from "axios";
 
-const ProtectedRoute = ({ children }) => {
+const LoginRedirect = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const baseURL = import.meta.env.VITE_API_BASE_URL;
@@ -73,15 +73,13 @@ const ProtectedRoute = ({ children }) => {
     );
   }
 
-  if (isAuthenticated === false) {
-    return <Navigate to="/login" replace />;
-  }
-
-  if (isAuthenticated && (window.location.pathname === "/" || window.location.pathname === "/login")) {
+  // If user is authenticated, redirect to /postboth
+  if (isAuthenticated) {
     return <Navigate to="/postboth" replace />;
   }
 
+  // If not authenticated, render the login page
   return children;
 };
 
-export default ProtectedRoute;
+export default LoginRedirect;
