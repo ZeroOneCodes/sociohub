@@ -5,7 +5,6 @@ import axios from "axios";
 const ProtectedRoute = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-
   const baseURL = import.meta.env.VITE_API_BASE_URL;
 
   useEffect(() => {
@@ -14,18 +13,39 @@ const ProtectedRoute = ({ children }) => {
         const accessToken = sessionStorage.getItem("accessToken");
         const userId = localStorage.getItem("userId");
 
-        if (!accessToken || !userId) {
-          setIsAuthenticated(false);
+        if (accessToken && userId) {
+          setIsAuthenticated(true);
           setIsLoading(false);
           return;
         }
 
-        // Verify token with backend
-        //await makeAuthenticatedRequest('/api/v1/auth/refre');
-        <Navigate to="/postboth" replace />
-        setIsAuthenticated(true);
+        const silentAuthResponse = await axios.post(
+          `${baseURL}/api/v1/auth/silent-auth`,
+          {},
+          {
+            withCredentials: true,
+            timeout: 5000,
+          }
+        );
+
+        if (silentAuthResponse.data.accessToken) {
+          sessionStorage.setItem(
+            "accessToken",
+            silentAuthResponse.data.accessToken
+          );
+          localStorage.setItem("userId", silentAuthResponse.data.user.id);
+          setIsAuthenticated(true);
+        } else {
+          console.log("Silent auth failed - no access token in response");
+          setIsAuthenticated(false);
+        }
       } catch (error) {
-        console.error("Authentication check failed:", error);
+        console.error("Error details:", {
+          message: error.message,
+          status: error.response?.status,
+          data: error.response?.data,
+        });
+
         setIsAuthenticated(false);
         sessionStorage.removeItem("accessToken");
         localStorage.removeItem("userId");
@@ -35,46 +55,7 @@ const ProtectedRoute = ({ children }) => {
     };
 
     checkAuth();
-  });
-
-  const makeAuthenticatedRequest = async (endpoint) => {
-    let accessToken = sessionStorage.getItem("accessToken");
-
-    try {
-      const response = await axios.get(`${baseURL}${endpoint}`, {
-        withCredentials: true,
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-
-      return response;
-    } catch (error) {
-      if (
-        error.response &&
-        (error.response.status === 401 || error.response.status === 403)
-      ) {
-        const refreshResponse = await axios.post(
-          `${baseURL}/api/v1/auth/refresh-token`,
-          {},
-          { withCredentials: true }
-        );
-
-        const newAccessToken = refreshResponse.data.accessToken;
-        sessionStorage.setItem("accessToken", newAccessToken);
-
-        const retryResponse = await axios.get(`${baseURL}${endpoint}`, {
-          withCredentials: true,
-          headers: {
-            Authorization: `Bearer ${newAccessToken}`,
-          },
-        });
-
-        return retryResponse;
-      }
-      throw error;
-    }
-  };
+  }, [baseURL]);
 
   if (isLoading) {
     return (
@@ -96,10 +77,10 @@ const ProtectedRoute = ({ children }) => {
     return <Navigate to="/login" replace />;
   }
 
-  // If authenticated, redirect to /postboth if on home route
-  if (isAuthenticated && window.location.pathname === '/') {
+  if (isAuthenticated && window.location.pathname === "/") {
     return <Navigate to="/postboth" replace />;
   }
+
   return children;
 };
 

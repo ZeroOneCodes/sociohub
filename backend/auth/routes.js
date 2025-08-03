@@ -11,6 +11,7 @@ router.post("/auth/signup", AuthController.signup);
 router.post("/auth/login", AuthController.login);
 router.post("/auth/refresh-token", AuthController.refreshToken);
 router.post("/auth/logout", AuthController.logout);
+router.post("/auth/silent-auth", AuthController.silentAuth);
 router.get("/auth/twitter", passport.authenticate("twitter"));
 router.get(
   "/auth/twitter/callback",
