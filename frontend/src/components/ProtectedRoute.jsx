@@ -77,7 +77,7 @@ const ProtectedRoute = ({ children }) => {
     return <Navigate to="/login" replace />;
   }
 
-  if (isAuthenticated && window.location.pathname === "/") {
+  if (isAuthenticated && (window.location.pathname === "/" || window.location.pathname === "/login")) {
     return <Navigate to="/postboth" replace />;
   }
 
