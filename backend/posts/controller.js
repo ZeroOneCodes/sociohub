@@ -482,3 +482,108 @@ module.exports.getLinkedInPosts = async (req, res) => {
     });
   }
 };
+
+module.exports.getUserDetailsTwitter = async (req, res) => {
+  const { userId } = req.params;
+  
+  if (!userId) {
+    return res.status(400).json({
+      success: false,
+      message: "User ID is required"
+    });
+  }
+
+  try {
+    const twitterProfile = await TwitterProfile.findOne({
+      where: { user_id: userId }
+    });
+
+    if (!twitterProfile) {
+      return res.status(404).json({
+        success: false,
+        message: "Twitter profile not found for this user"
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        name: twitterProfile.name,
+        screen_name: twitterProfile.screen_name,
+        location: twitterProfile.location,
+        description: twitterProfile.description,
+        protected: twitterProfile.protected,
+        followers_count: twitterProfile.followers_count,
+        friends_count: twitterProfile.friends_count,
+        listed_count: twitterProfile.listed_count,
+        favourites_count: twitterProfile.favourites_count,
+        verified: twitterProfile.verified,
+        statuses_count: twitterProfile.statuses_count,
+        lang: twitterProfile.lang,
+        following: twitterProfile.following,
+        notifications: twitterProfile.notifications,
+        translator_type: twitterProfile.translator_type,
+        suspended: twitterProfile.suspended,
+        createdAt: twitterProfile.createdAt,
+        updatedAt: twitterProfile.updatedAt
+      }
+    });
+
+  } catch (error) {
+    console.error("Error fetching Twitter profile:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error while fetching Twitter profile",
+      error: error.message
+    });
+  }
+};
+
+module.exports.getUserDetailsLinkedin = async (req, res) => {
+  const { userId } = req.params;
+  
+  if (!userId) {
+    return res.status(400).json({
+      success: false,
+      message: "User ID is required"
+    });
+  }
+
+  try {
+    const linkedinProfile = await LinkedInProfile.findOne({
+      where: { user_id: userId }
+    });
+
+    if (!linkedinProfile) {
+      return res.status(404).json({
+        success: false,
+        message: "LinkedIn profile not found for this user"
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        name: linkedinProfile.name,
+        given_name: linkedinProfile.given_name,
+        family_name: linkedinProfile.family_name,
+        email: linkedinProfile.email,
+        email_verified: linkedinProfile.email_verified,
+        picture: linkedinProfile.picture,
+        country: linkedinProfile.country,
+        language: linkedinProfile.language,
+        sub: linkedinProfile.sub,
+        createdAt: linkedinProfile.createdAt,
+        updatedAt: linkedinProfile.updatedAt
+      }
+    });
+
+  } catch (error) {
+    console.error("Error fetching LinkedIn profile:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error while fetching LinkedIn profile",
+      error: error.message
+    });
+  }
+};
