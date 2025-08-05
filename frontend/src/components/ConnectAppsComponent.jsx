@@ -38,7 +38,6 @@ const ConnectAppsComponent = () => {
         const userId = localStorage.getItem("userId");
 
         if (!userId) {
-          console.log("No user ID found");
           setTwitterConnected(false);
           localStorage.removeItem("twitterProfile");
           return;
@@ -79,10 +78,6 @@ const ConnectAppsComponent = () => {
           error.response &&
           (error.response.status === 401 || error.response.status === 403)
         ) {
-          console.log(
-            "Token expired during Twitter auth check, attempting to refresh..."
-          );
-
           try {
             const refreshResponse = await axios.post(
               `${baseURL}/api/v1/auth/refresh-token`,
@@ -150,10 +145,8 @@ const ConnectAppsComponent = () => {
     const checkLinkedInAuth = async () => {
       try {
         const userId = localStorage.getItem("userId");
-        console.log("Checking LinkedIn status for user:", userId);
 
         if (!userId) {
-          console.log("No user ID found");
           setLinkedinConnected(false);
           localStorage.removeItem("linkedinProfile");
           return;
@@ -174,20 +167,12 @@ const ConnectAppsComponent = () => {
           }
         );
 
-        console.log("LinkedIn API response:", response.data);
-
-        // Update connection status based on the response
         const isConnected =
           response.data.status && response.data.tokens?.hasAccessToken;
 
         setLinkedinConnected(isConnected);
 
-        // Store profile info if connected
         if (isConnected) {
-          console.log(
-            "LinkedIn connected with profile:",
-            response.data.profile
-          );
           localStorage.setItem(
             "linkedinProfile",
             JSON.stringify({
@@ -197,37 +182,23 @@ const ConnectAppsComponent = () => {
             })
           );
         } else {
-          console.log("LinkedIn not connected");
           localStorage.removeItem("linkedinProfile");
         }
       } catch (error) {
-        console.error("Error checking LinkedIn authentication:", error);
-
-        // Check if the error is 401 or 403 (token expired)
         if (
           error.response &&
           (error.response.status === 401 || error.response.status === 403)
         ) {
-          console.log(
-            "Token expired during LinkedIn auth check, attempting to refresh..."
-          );
-
           try {
-            // Attempt to refresh the token
             const refreshResponse = await axios.post(
               `${baseURL}/api/v1/auth/refresh-token`,
-              {}, // Empty body since you're using cookies
+              {},
               { withCredentials: true }
             );
 
-            // Update the access token in session storage
             const newAccessToken = refreshResponse.data.accessToken;
             sessionStorage.setItem("accessToken", newAccessToken);
-            console.log(
-              "Token refreshed successfully, retrying LinkedIn auth check..."
-            );
 
-            // Retry the LinkedIn auth check with the new token
             const userId = localStorage.getItem("userId");
             const retryResponse = await axios.get(
               `${baseURL}/api/v1/auth/linkedin/status`,
@@ -240,24 +211,13 @@ const ConnectAppsComponent = () => {
               }
             );
 
-            console.log(
-              "LinkedIn API response after refresh:",
-              retryResponse.data
-            );
-
-            // Update connection status based on the response
             const isConnected =
               retryResponse.data.status &&
               retryResponse.data.tokens?.hasAccessToken;
 
             setLinkedinConnected(isConnected);
 
-            // Store profile info if connected
             if (isConnected) {
-              console.log(
-                "LinkedIn connected with profile:",
-                retryResponse.data.profile
-              );
               localStorage.setItem(
                 "linkedinProfile",
                 JSON.stringify({
@@ -267,7 +227,6 @@ const ConnectAppsComponent = () => {
                 })
               );
             } else {
-              console.log("LinkedIn not connected");
               localStorage.removeItem("linkedinProfile");
             }
           } catch (refreshError) {
@@ -275,7 +234,7 @@ const ConnectAppsComponent = () => {
               "Token refresh failed during LinkedIn auth check:",
               refreshError
             );
-            // If refresh fails, user needs to login again
+
             setLinkedinConnected(false);
             localStorage.removeItem("linkedinProfile");
 
@@ -344,11 +303,18 @@ const ConnectAppsComponent = () => {
   };
 
   const navItems = [
-    { icon: <FaHome />, label: "Home", active: false, path: "/postboth" },
     {
+      id: "home",
+      icon: <FaHome />,
+      label: "Home",
+      active: false,
+      path: "/postboth",
+    },
+    {
+      id: "connect",
       icon: <FaPlug />,
       label: "Connect Apps",
-      active: true,
+      active: false,
       path: "/connect/apps",
     },
   ];

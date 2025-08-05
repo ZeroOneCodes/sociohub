@@ -17,6 +17,8 @@ import {
   FaBell,
   FaChartLine,
   FaBars,
+  FaCheck,
+  FaTimesCircle,
 } from "react-icons/fa";
 import { Link } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
@@ -45,6 +47,54 @@ const CombinedSocialPost = () => {
   const [isNavExpanded, setIsNavExpanded] = useState(false);
   const [activeItem, setActiveItem] = useState("home");
   const navigate = useNavigate();
+  const [twitterUser, setTwitterUser] = useState(null);
+  const [linkedInUser, setLinkedInUser] = useState(null);
+  const [loadingUserData, setLoadingUserData] = useState(false);
+
+  // Fetch user data
+  useEffect(() => {
+    const fetchUserData = async () => {
+      const userId = localStorage.getItem("userId");
+      if (!userId) return;
+      console.log(loadingUserData);
+      setLoadingUserData(true);
+      try {
+        // Fetch Twitter user data
+        const twitterResponse = await axios.get(
+          `${baseURL}/api/v1/getUserDetailsTwitter/${userId}`,
+          {
+            withCredentials: true,
+            headers: {
+              Authorization: `Bearer ${sessionStorage.getItem("accessToken")}`,
+            },
+          }
+        );
+        if (twitterResponse.data.success) {
+          setTwitterUser(twitterResponse.data.data);
+        }
+
+        // Fetch LinkedIn user data
+        const linkedInResponse = await axios.get(
+          `${baseURL}/api/v1/getUserDetailsLinkedin/${userId}`,
+          {
+            withCredentials: true,
+            headers: {
+              Authorization: `Bearer ${sessionStorage.getItem("accessToken")}`,
+            },
+          }
+        );
+        if (linkedInResponse.data.success) {
+          setLinkedInUser(linkedInResponse.data.data);
+        }
+      } catch (error) {
+        console.error("Error fetching user data:", error);
+      } finally {
+        setLoadingUserData(false);
+      }
+    };
+
+    fetchUserData();
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -66,15 +116,7 @@ const CombinedSocialPost = () => {
     }
   };
 
-  // User profile
-  const [user] = useState({
-    name: "Alex Johnson",
-    username: "@alexjohnson",
-    coins: 250,
-    profileImage: "https://i.pravatar.cc/150?img=32",
-  });
-
-  const MAX_TWEET_LENGTH = 280;
+  const MAX_TWEET_LENGTH = twitterUser?.verified ? 25000 : 280;
 
   useEffect(() => {
     if (successMessage === "") {
@@ -289,8 +331,15 @@ const CombinedSocialPost = () => {
   };
 
   const navItems = [
-    { icon: <FaHome />, label: "Home", active: false, path: "/postboth" },
     {
+      id: "home",
+      icon: <FaHome />,
+      label: "Home",
+      active: false,
+      path: "/postboth",
+    },
+    {
+      id: "connect",
       icon: <FaPlug />,
       label: "Connect Apps",
       active: false,
@@ -349,16 +398,18 @@ const CombinedSocialPost = () => {
               <div className="flex items-center group cursor-pointer">
                 <div className="ml-3">
                   <p className="font-semibold text-white group-hover:text-[#0078D7] transition-colors">
-                    {user.name}
+                    {linkedInUser?.name || "Loading..."}
                   </p>
-                  <p className="text-xs text-[#0078D7]">{user.username}</p>
+                  <p className="text-xs text-[#0078D7]">
+                    {twitterUser?.name ? `@${twitterUser.name}` : ""}
+                  </p>
                 </div>
               </div>
               <div
                 className="flex items-center mt-4 p-3 rounded-xl backdrop-blur-sm"
                 style={{ backgroundColor: "rgb(32,34,34)" }}
               >
-                <span className="text-sm font-medium">{user.coins} coins</span>
+                <span className="text-sm font-medium">Connected Accounts</span>
               </div>
             </>
           ) : (
@@ -371,17 +422,19 @@ const CombinedSocialPost = () => {
           <ul className="space-y-2 px-3">
             {navItems.map((item) => (
               <li key={item.id}>
+                {" "}
+                {/* Use item.id as the key */}
                 <Link
                   to={item.path}
                   onClick={() => setActiveItem(item.id)}
                   className={`flex items-center ${
                     isNavExpanded ? "px-4" : "justify-center px-0"
                   } py-3 rounded-xl font-medium transition-all duration-300 group
-                ${
-                  activeItem === item.id
-                    ? "bg-gradient-to-r from-[#0078D7]/20 to-[#00A4EF]/10 text-[#0078D7]"
-                    : "text-gray-400 hover:text-white"
-                }`}
+          ${
+            activeItem === item.id
+              ? "bg-gradient-to-r from-[#0078D7]/20 to-[#00A4EF]/10 text-[#0078D7]"
+              : "text-gray-400 hover:text-white"
+          }`}
                   style={{
                     backgroundColor:
                       activeItem === item.id
@@ -657,7 +710,16 @@ const CombinedSocialPost = () => {
                       <div className="ml-3 text-left">
                         <div className="font-medium text-white">Twitter</div>
                         <div className="text-sm text-gray-500">
-                          280 characters
+                          {twitterUser ? (
+                            <div className="flex items-center">
+                              <span className="mr-1">{twitterUser.name}</span>
+                              {twitterUser.verified && (
+                                <FaCheckCircle className="text-blue-500 text-xs" />
+                              )}
+                            </div>
+                          ) : (
+                            <span>280 characters</span>
+                          )}
                         </div>
                       </div>
                       <input
@@ -690,7 +752,9 @@ const CombinedSocialPost = () => {
                       <div className="ml-3 text-left">
                         <div className="font-medium text-white">LinkedIn</div>
                         <div className="text-sm text-gray-500">
-                          Professional network
+                          {linkedInUser
+                            ? linkedInUser.name
+                            : "Professional network"}
                         </div>
                       </div>
                       <input
