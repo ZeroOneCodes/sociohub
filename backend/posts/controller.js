@@ -2,7 +2,7 @@ require("dotenv").config();
 const TwitterProfile = require("../models/TwitterProfile.js");
 const LinkedInProfile = require("../models/LinkedProfile.js");
 const TwitterPosts = require("../models/TwitterPosts.js");
-const LinkedInPosts = require("../models/LinkedInPosts.js")
+const LinkedInPosts = require("../models/LinkedInPosts.js");
 const {
   executePosts,
   deleteTweet,
@@ -13,103 +13,157 @@ const {
 const fs = require("fs");
 const path = require("path");
 
-// Helper function to clean up uploaded files
 const cleanupFile = (filePath) => {
   if (filePath && fs.existsSync(filePath)) {
     try {
       fs.unlinkSync(filePath);
       console.log(`Cleaned up file: ${filePath}`);
-    } catch (error) {
-      console.error(`Error cleaning up file ${filePath}:`, error.message);
+    } catch (err) {
+      console.error(`Error cleaning up file ${filePath}:`, err);
     }
   }
 };
 
-// Helper function to validate media file for each platform
-const validateMediaFile = (mediaFile, platforms) => {
-  if (!mediaFile) return { valid: true };
-
+const validateMediaFiles = (files, platforms) => {
   const errors = [];
-  const fileSize = fs.statSync(mediaFile.path).size;
-  const mimetype = mediaFile.mimetype;
+  const validFiles = [];
+  const platformLimits = {
+    twitter: {
+      image: {
+        maxSize: 5 * 1024 * 1024, // 5MB
+        types: ["image/jpeg", "image/png", "image/gif", "image/webp"],
+      },
+      video: {
+        maxSize: 50 * 1024 * 1024, // 50MB
+        types: ["video/mp4"],
+      },
+      maxFiles: 4,
+    },
+    linkedin: {
+      image: {
+        maxSize: 10 * 1024 * 1024, // LinkedIn allows 10MB for images
+        types: ["image/jpeg", "image/png"],
+      },
+      video: {
+        maxSize: 200 * 1024 * 1024, // 200MB for videos
+        types: ["video/mp4"],
+      },
+      maxFiles: 10, // BYPASSED: Increased from 1 to allow multiple images
+    },
+  };
 
-  // Twitter validation
-  if (platforms.twitter) {
-    const allowedTwitterImageTypes = [
-      "image/jpeg",
-      "image/png",
-      "image/gif",
-      "image/webp",
-    ];
-    const allowedTwitterVideoTypes = ["video/mp4"];
-    const maxTwitterImageSize = 5 * 1024 * 1024; // 5MB
-    const maxTwitterVideoSize = 512 * 1024 * 1024; // 512MB
+  // Ensure files is always an array
+  const filesArray = Array.isArray(files) ? files : [files];
 
-    if (mimetype.startsWith("image/")) {
-      if (!allowedTwitterImageTypes.includes(mimetype)) {
-        errors.push(`Twitter doesn't support ${mimetype} images`);
-      } else if (fileSize > maxTwitterImageSize) {
-        errors.push(
-          `Image too large for Twitter (max 5MB, got ${Math.round(
-            fileSize / 1024 / 1024
-          )}MB)`
+  // Check if trying to post video to both platforms
+  const hasVideo = filesArray.some(
+    (file) => file.mimetype && file.mimetype.startsWith("video/")
+  );
+  // if (hasVideo && platforms.twitter && platforms.linkedin) {
+  //   errors.push("Cannot upload videos to both Twitter and LinkedIn simultaneously");
+  // }
+
+  // Validate each file for each platform
+  filesArray.forEach((file, index) => {
+    const fileErrors = [];
+
+    if (platforms.twitter) {
+      if (index >= platformLimits.twitter.maxFiles) {
+        fileErrors.push(
+          `Twitter only allows ${platformLimits.twitter.maxFiles} files per post`
         );
-      }
-    } else if (mimetype.startsWith("video/")) {
-      if (!allowedTwitterVideoTypes.includes(mimetype)) {
-        errors.push(`Twitter doesn't support ${mimetype} videos`);
-      } else if (fileSize > maxTwitterVideoSize) {
-        errors.push(
-          `Video too large for Twitter (max 512MB, got ${Math.round(
-            fileSize / 1024 / 1024
-          )}MB)`
-        );
+      } else {
+        if (file.mimetype && file.mimetype.startsWith("image/")) {
+          if (!platformLimits.twitter.image.types.includes(file.mimetype)) {
+            fileErrors.push(`Twitter doesn't support ${file.mimetype} images`);
+          }
+          if (file.size > platformLimits.twitter.image.maxSize) {
+            fileErrors.push(
+              `Twitter image exceeds ${
+                platformLimits.twitter.image.maxSize / 1024 / 1024
+              }MB limit`
+            );
+          }
+        } else if (file.mimetype && file.mimetype.startsWith("video/")) {
+          if (!platformLimits.twitter.video.types.includes(file.mimetype)) {
+            fileErrors.push(`Twitter doesn't support ${file.mimetype} videos`);
+          }
+          if (file.size > platformLimits.twitter.video.maxSize) {
+            fileErrors.push(
+              `Twitter video exceeds ${
+                platformLimits.twitter.video.maxSize / 1024 / 1024
+              }MB limit`
+            );
+          }
+        } else {
+          fileErrors.push(
+            `Twitter doesn't support ${file.mimetype || "unknown"} files`
+          );
+        }
       }
     }
-  }
 
-  // LinkedIn validation
-  if (platforms.linkedin) {
-    const allowedLinkedInImageTypes = ["image/jpeg", "image/png"];
-    const allowedLinkedInVideoTypes = [
-      "video/mp4",
-      "video/mpeg",
-      "video/quicktime",
-    ];
-    const maxLinkedInImageSize = 8 * 1024 * 1024; // 8MB
-    const maxLinkedInVideoSize = 200 * 1024 * 1024; // 200MB
-
-    if (mimetype.startsWith("image/")) {
-      if (!allowedLinkedInImageTypes.includes(mimetype)) {
-        errors.push(`LinkedIn doesn't support ${mimetype} images`);
-      } else if (fileSize > maxLinkedInImageSize) {
-        errors.push(
-          `Image too large for LinkedIn (max 8MB, got ${Math.round(
-            fileSize / 1024 / 1024
-          )}MB)`
-        );
-      }
-    } else if (mimetype.startsWith("video/")) {
-      if (!allowedLinkedInVideoTypes.includes(mimetype)) {
-        errors.push(`LinkedIn doesn't support ${mimetype} videos`);
-      } else if (fileSize > maxLinkedInVideoSize) {
-        errors.push(
-          `Video too large for LinkedIn (max 200MB, got ${Math.round(
-            fileSize / 1024 / 1024
-          )}MB)`
-        );
-      }
+    if (platforms.linkedin) {
+      // BYPASSED: Removed the maxFiles check for LinkedIn images
+      // if (index >= platformLimits.linkedin.maxFiles) {
+      //   fileErrors.push(
+      //     `LinkedIn only allows ${platformLimits.linkedin.maxFiles} file per post`
+      //   );
+      // } else {
+        if (file.mimetype && file.mimetype.startsWith("image/")) {
+          if (!platformLimits.linkedin.image.types.includes(file.mimetype)) {
+            fileErrors.push(`LinkedIn doesn't support ${file.mimetype} images`);
+          }
+          if (file.size > platformLimits.linkedin.image.maxSize) {
+            fileErrors.push(
+              `LinkedIn image exceeds ${
+                platformLimits.linkedin.image.maxSize / 1024 / 1024
+              }MB limit`
+            );
+          }
+        } else if (file.mimetype && file.mimetype.startsWith("video/")) {
+          // Keep video restriction for LinkedIn (still only 1 video allowed)
+          if (index >= 1) {
+            fileErrors.push("LinkedIn only allows 1 video per post");
+          } else {
+            if (!platformLimits.linkedin.video.types.includes(file.mimetype)) {
+              fileErrors.push(`LinkedIn doesn't support ${file.mimetype} videos`);
+            }
+            if (file.size > platformLimits.linkedin.video.maxSize) {
+              fileErrors.push(
+                `LinkedIn video exceeds ${
+                  platformLimits.linkedin.video.maxSize / 1024 / 1024
+                }MB limit`
+              );
+            }
+          }
+        } else {
+          fileErrors.push(
+            `LinkedIn doesn't support ${file.mimetype || "unknown"} files`
+          );
+        }
+      // }
     }
-  }
+
+    if (fileErrors.length === 0) {
+      validFiles.push(file);
+    } else {
+      errors.push({
+        file: file.originalname || file.name || "unknown",
+        errors: fileErrors,
+      });
+    }
+  });
 
   return {
     valid: errors.length === 0,
-    errors: errors,
+    validFiles,
+    errors: errors.length > 0 ? errors : undefined,
   };
 };
 
 module.exports.postAll = async (req, res) => {
-  let mediaFile = null;
+  const mediaFiles = req.files || [];
 
   try {
     const {
@@ -126,20 +180,18 @@ module.exports.postAll = async (req, res) => {
       contentFormat,
     } = req.body;
 
-    mediaFile = req.file;
-
     // Log request details for debugging
     console.log("Post request received:", {
       userId,
       postToTwitter,
       postToLinkedIn,
-      hasMediaFile: !!mediaFile,
-      mediaType: mediaFile?.mimetype,
-      mediaSize: mediaFile ? fs.statSync(mediaFile.path).size : 0,
+      mediaFilesCount: mediaFiles.length,
+      mediaTypes: mediaFiles.map((file) => file.mimetype),
     });
 
     // Validate required fields
     if (!userId) {
+      mediaFiles.forEach((file) => cleanupFile(file.path));
       return res.status(400).json({
         success: false,
         message: "User ID is required",
@@ -147,6 +199,7 @@ module.exports.postAll = async (req, res) => {
     }
 
     if (!content) {
+      mediaFiles.forEach((file) => cleanupFile(file.path));
       return res.status(400).json({
         success: false,
         message: "Content is required",
@@ -155,26 +208,50 @@ module.exports.postAll = async (req, res) => {
 
     // Check if at least one platform is selected
     if (postToTwitter !== "true" && postToLinkedIn !== "true") {
+      mediaFiles.forEach((file) => cleanupFile(file.path));
       return res.status(400).json({
         success: false,
         message: "At least one platform (Twitter or LinkedIn) must be selected",
       });
     }
 
-    // Validate media file for selected platforms
-    if (mediaFile) {
-      const validation = validateMediaFile(mediaFile, {
+    // Validate media files for selected platforms
+    if (mediaFiles.length > 0) {
+      const validation = validateMediaFiles(mediaFiles, {
         twitter: postToTwitter === "true",
         linkedin: postToLinkedIn === "true",
       });
 
       if (!validation.valid) {
-        cleanupFile(mediaFile.path);
+        mediaFiles.forEach((f) => cleanupFile(f.path));
         return res.status(400).json({
           success: false,
           message: "Media file validation failed",
           errors: validation.errors,
         });
+      }
+
+      // Additional validation for Twitter (max 4 images, 1 video)
+      if (postToTwitter === "true") {
+        const twitterVideos = mediaFiles.filter(
+          (file) => file.mimetype && file.mimetype.startsWith("video/")
+        );
+
+        if (twitterVideos.length > 1) {
+          mediaFiles.forEach((f) => cleanupFile(f.path));
+          return res.status(400).json({
+            success: false,
+            message: "Twitter only allows one video per post",
+          });
+        }
+
+        if (twitterVideos.length === 1 && mediaFiles.length > 1) {
+          mediaFiles.forEach((f) => cleanupFile(f.path));
+          return res.status(400).json({
+            success: false,
+            message: "Twitter doesn't allow mixing videos with other media",
+          });
+        }
       }
     }
 
@@ -190,7 +267,7 @@ module.exports.postAll = async (req, res) => {
 
     // Validate platform connections
     if (postToTwitter === "true" && !twitterUser) {
-      cleanupFile(mediaFile?.path);
+      mediaFiles.forEach((file) => cleanupFile(file.path));
       return res.status(400).json({
         success: false,
         message:
@@ -199,7 +276,7 @@ module.exports.postAll = async (req, res) => {
     }
 
     if (postToLinkedIn === "true" && !linkedinUser) {
-      cleanupFile(mediaFile?.path);
+      mediaFiles.forEach((file) => cleanupFile(file.path));
       return res.status(400).json({
         success: false,
         message:
@@ -221,40 +298,29 @@ module.exports.postAll = async (req, res) => {
       contentFormat,
     };
 
-    console.log("Executing posts with content:", postContent);
-
     // Execute posts
     const PostResponse = await executePosts(
       twitterUser?.twitter_token,
       twitterUser?.twitter_secret,
       linkedinUser?.access_token,
       postContent,
-      mediaFile,
+      mediaFiles,
       linkedinUser?.sub
     );
 
+    // Save to database
     if (postToTwitter === "true" && PostResponse?.twitter?.data) {
       const now = new Date();
       await TwitterPosts.create({
         user_id: userId,
         twitter_post_id: PostResponse.twitter.data.id,
         content: PostResponse.twitter.data.text,
-        post_created_at: now, 
+        post_created_at: now,
         created_at: now,
-        updated_at: now
+        updated_at: now,
       });
     }
-    if (postToTwitter === "true" && PostResponse?.data?.twitter?.data?.id) {
-      const now = new Date();
-      await TwitterPosts.create({
-        user_id: userId,
-        twitter_post_id: PostResponse.twitter.data.id,
-        content: PostResponse.twitter.data.text,
-        post_created_at: now, 
-        created_at: now,
-        updated_at: now
-      });
-    }
+
     if (postToLinkedIn === "true" && PostResponse?.linkedIn?.id) {
       const now = new Date();
       await LinkedInPosts.create({
@@ -263,11 +329,12 @@ module.exports.postAll = async (req, res) => {
         content: content,
         post_created_at: now,
         created_at: now,
-        updated_at: now
+        updated_at: now,
       });
     }
 
-    cleanupFile(mediaFile?.path);
+    // Cleanup files
+    mediaFiles.forEach((file) => cleanupFile(file.path));
 
     return res.status(200).json({
       success: true,
@@ -277,10 +344,9 @@ module.exports.postAll = async (req, res) => {
   } catch (error) {
     console.error("Error in postAll:", error);
 
-    // Clean up media file in case of error
-    cleanupFile(mediaFile?.path);
+    // Cleanup all files in case of error
+    mediaFiles.forEach((file) => cleanupFile(file.path));
 
-    // Determine error message and status code
     let statusCode = 500;
     let message = "An error occurred while processing your post";
 
@@ -289,7 +355,7 @@ module.exports.postAll = async (req, res) => {
       message = error.message;
     } else if (error.message?.includes("Media upload failed")) {
       statusCode = 400;
-      message = "Media upload failed. Please check your file and try again.";
+      message = "Media upload failed. Please check your files and try again.";
     } else if (error.message?.includes("Tweet posting failed")) {
       statusCode = 400;
       message =
@@ -485,23 +551,23 @@ module.exports.getLinkedInPosts = async (req, res) => {
 
 module.exports.getUserDetailsTwitter = async (req, res) => {
   const { userId } = req.params;
-  
+
   if (!userId) {
     return res.status(400).json({
       success: false,
-      message: "User ID is required"
+      message: "User ID is required",
     });
   }
 
   try {
     const twitterProfile = await TwitterProfile.findOne({
-      where: { user_id: userId }
+      where: { user_id: userId },
     });
 
     if (!twitterProfile) {
       return res.status(404).json({
         success: false,
-        message: "Twitter profile not found for this user"
+        message: "Twitter profile not found for this user",
       });
     }
 
@@ -525,39 +591,38 @@ module.exports.getUserDetailsTwitter = async (req, res) => {
         translator_type: twitterProfile.translator_type,
         suspended: twitterProfile.suspended,
         createdAt: twitterProfile.createdAt,
-        updatedAt: twitterProfile.updatedAt
-      }
+        updatedAt: twitterProfile.updatedAt,
+      },
     });
-
   } catch (error) {
     console.error("Error fetching Twitter profile:", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error while fetching Twitter profile",
-      error: error.message
+      error: error.message,
     });
   }
 };
 
 module.exports.getUserDetailsLinkedin = async (req, res) => {
   const { userId } = req.params;
-  
+
   if (!userId) {
     return res.status(400).json({
       success: false,
-      message: "User ID is required"
+      message: "User ID is required",
     });
   }
 
   try {
     const linkedinProfile = await LinkedInProfile.findOne({
-      where: { user_id: userId }
+      where: { user_id: userId },
     });
 
     if (!linkedinProfile) {
       return res.status(404).json({
         success: false,
-        message: "LinkedIn profile not found for this user"
+        message: "LinkedIn profile not found for this user",
       });
     }
 
@@ -574,16 +639,15 @@ module.exports.getUserDetailsLinkedin = async (req, res) => {
         language: linkedinProfile.language,
         sub: linkedinProfile.sub,
         createdAt: linkedinProfile.createdAt,
-        updatedAt: linkedinProfile.updatedAt
-      }
+        updatedAt: linkedinProfile.updatedAt,
+      },
     });
-
   } catch (error) {
     console.error("Error fetching LinkedIn profile:", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error while fetching LinkedIn profile",
-      error: error.message
+      error: error.message,
     });
   }
 };

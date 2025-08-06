@@ -127,7 +127,9 @@ const uploadMediaChunked = async (
     process.env.TWITTER_MEDIA_UPLOAD_URL ||
     "https://upload.twitter.com/1.1/media/upload.json";
   const fileSize = fs.statSync(mediaFile.path).size;
-  const chunkSize = 5 * 1024 * 1024;
+
+  // Increased chunk size for faster uploads (10MB instead of 5MB)
+  const chunkSize = 10 * 1024 * 1024;
 
   console.log("Starting chunked upload - INIT phase");
   const initHeaders = oauthInstance.toHeader(
@@ -142,43 +144,44 @@ const uploadMediaChunked = async (
 
   const initResponse = await axios.post(mediaUploadUrl, initData, {
     headers: { ...initHeaders, ...initData.getHeaders() },
+    timeout: 30000, // Reduced timeout for faster failure detection
   });
 
   const mediaId = initResponse.data.media_id_string;
   console.log(`INIT successful. Media ID: ${mediaId}`);
 
+  // Read file once and keep in memory for faster chunk access
   const fileBuffer = fs.readFileSync(mediaFile.path);
-  let segmentIndex = 0;
+  const totalChunks = Math.ceil(fileSize / chunkSize);
+
+  // Create chunk upload promises for parallel processing
+  const chunkPromises = [];
 
   for (let i = 0; i < fileSize; i += chunkSize) {
+    const segmentIndex = Math.floor(i / chunkSize);
     const chunk = fileBuffer.slice(i, Math.min(i + chunkSize, fileSize));
-    console.log(
-      `Uploading chunk ${segmentIndex + 1}, size: ${chunk.length} bytes`
+
+    // Create promise for each chunk upload
+    const chunkPromise = uploadChunk(
+      mediaUploadUrl,
+      authToken,
+      mediaId,
+      segmentIndex,
+      chunk
     );
 
-    const appendHeaders = oauthInstance.toHeader(
-      oauthInstance.authorize(
-        { url: mediaUploadUrl, method: "POST" },
-        authToken
-      )
-    );
-
-    const appendData = new FormData();
-    appendData.append("command", "APPEND");
-    appendData.append("media_id", mediaId);
-    appendData.append("segment_index", segmentIndex.toString());
-    appendData.append("media", chunk, { filename: "chunk" });
-
-    await axios.post(mediaUploadUrl, appendData, {
-      headers: { ...appendHeaders, ...appendData.getHeaders() },
-      timeout: 60000,
-    });
-
-    segmentIndex++;
+    chunkPromises.push(chunkPromise);
   }
+
+  console.log(`Uploading ${totalChunks} chunks in parallel...`);
+
+  // Upload chunks in parallel with concurrency limit
+  const concurrencyLimit = 3; // Adjust based on API limits
+  await uploadChunksWithConcurrency(chunkPromises, concurrencyLimit);
 
   console.log("All chunks uploaded successfully");
 
+  // FINALIZE phase
   console.log("Starting FINALIZE phase");
   const finalizeHeaders = oauthInstance.toHeader(
     oauthInstance.authorize({ url: mediaUploadUrl, method: "POST" }, authToken)
@@ -190,6 +193,7 @@ const uploadMediaChunked = async (
 
   const finalizeResponse = await axios.post(mediaUploadUrl, finalizeData, {
     headers: { ...finalizeHeaders, ...finalizeData.getHeaders() },
+    timeout: 30000,
   });
 
   if (finalizeResponse.data.processing_info) {
@@ -201,7 +205,81 @@ const uploadMediaChunked = async (
   return mediaId;
 };
 
-const waitForProcessing = async (mediaId, authToken, maxAttempts = 20) => {
+// Helper function to upload individual chunks
+const uploadChunk = async (
+  mediaUploadUrl,
+  authToken,
+  mediaId,
+  segmentIndex,
+  chunk
+) => {
+  const appendHeaders = oauthInstance.toHeader(
+    oauthInstance.authorize({ url: mediaUploadUrl, method: "POST" }, authToken)
+  );
+
+  const appendData = new FormData();
+  appendData.append("command", "APPEND");
+  appendData.append("media_id", mediaId);
+  appendData.append("segment_index", segmentIndex.toString());
+  appendData.append("media", chunk, { filename: `chunk_${segmentIndex}` });
+
+  const maxRetries = 3;
+  let attempt = 0;
+
+  while (attempt < maxRetries) {
+    try {
+      await axios.post(mediaUploadUrl, appendData, {
+        headers: { ...appendHeaders, ...appendData.getHeaders() },
+        timeout: 45000, // Increased timeout for larger chunks
+        // Add compression to reduce transfer time
+        decompress: true,
+      });
+
+      console.log(`Chunk ${segmentIndex + 1} uploaded successfully`);
+      return;
+    } catch (error) {
+      attempt++;
+      console.warn(
+        `Chunk ${segmentIndex + 1} failed (attempt ${attempt}/${maxRetries}):`,
+        error.message
+      );
+
+      if (attempt === maxRetries) {
+        throw new Error(
+          `Failed to upload chunk ${
+            segmentIndex + 1
+          } after ${maxRetries} attempts`
+        );
+      }
+
+      // Exponential backoff
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.pow(2, attempt) * 1000)
+      );
+    }
+  }
+};
+
+// Helper function to manage concurrent uploads
+const uploadChunksWithConcurrency = async (chunkPromises, limit) => {
+  const results = [];
+
+  for (let i = 0; i < chunkPromises.length; i += limit) {
+    const batch = chunkPromises.slice(i, i + limit);
+    const batchResults = await Promise.all(batch);
+    results.push(...batchResults);
+
+    // Small delay between batches to avoid overwhelming the API
+    if (i + limit < chunkPromises.length) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+
+  return results;
+};
+
+// Optimized processing wait function
+const waitForProcessing = async (mediaId, authToken, maxAttempts = 30) => {
   const mediaUploadUrl =
     process.env.TWITTER_MEDIA_UPLOAD_URL ||
     "https://upload.twitter.com/1.1/media/upload.json";
@@ -217,179 +295,258 @@ const waitForProcessing = async (mediaId, authToken, maxAttempts = 20) => {
       )
     );
 
-    const statusResponse = await axios.get(
-      `${mediaUploadUrl}?command=STATUS&media_id=${mediaId}`,
-      {
-        headers: statusHeaders,
-      }
-    );
-
-    const processingInfo = statusResponse.data.processing_info;
-    console.log(`Processing status: ${processingInfo.state}`);
-
-    if (processingInfo.state === "succeeded") {
-      return;
-    } else if (processingInfo.state === "failed") {
-      throw new Error(
-        `Video processing failed: ${
-          processingInfo.error?.message || "Unknown error"
-        }`
+    try {
+      const statusResponse = await axios.get(
+        `${mediaUploadUrl}?command=STATUS&media_id=${mediaId}`,
+        {
+          headers: statusHeaders,
+          timeout: 15000, // Faster timeout for status checks
+        }
       );
-    }
 
-    // Wait before next check
-    const waitTime = processingInfo.check_after_secs || 5;
-    console.log(`Waiting ${waitTime} seconds before next status check...`);
-    await new Promise((resolve) => setTimeout(resolve, waitTime * 1000));
+      const processingInfo = statusResponse.data.processing_info;
+      console.log(
+        `Processing status: ${processingInfo.state} (attempt ${
+          attempt + 1
+        }/${maxAttempts})`
+      );
+
+      if (processingInfo.state === "succeeded") {
+        return;
+      } else if (processingInfo.state === "failed") {
+        throw new Error(
+          `Video processing failed: ${
+            processingInfo.error?.message || "Unknown error"
+          }`
+        );
+      }
+
+      // Dynamic wait time based on progress
+      const waitTime = Math.min(processingInfo.check_after_secs || 3, 10);
+      console.log(`Waiting ${waitTime} seconds before next status check...`);
+      await new Promise((resolve) => setTimeout(resolve, waitTime * 1000));
+    } catch (error) {
+      if (error.code === "ECONNABORTED" || error.message.includes("timeout")) {
+        console.warn(
+          `Status check timeout on attempt ${attempt + 1}, retrying...`
+        );
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        continue;
+      }
+      throw error;
+    }
   }
 
-  throw new Error("Video processing timeout");
+  throw new Error("Video processing timeout - exceeded maximum attempts");
 };
 
+// Optimized LinkedIn media upload
+const optimizeLinkedInUpload = async (mediaFile, linkedinId, accessToken) => {
+  const mediaType = mediaFile.mimetype.startsWith("image/") ? "IMAGE" : "VIDEO";
+
+  console.log(
+    `LinkedIn media upload - Type: ${mediaType}, File: ${
+      mediaFile.originalname || "unknown"
+    }, Size: ${(fs.statSync(mediaFile.path).size / (1024 * 1024)).toFixed(2)}MB`
+  );
+
+  // Register upload with longer timeout for large files
+  const registerUploadResponse = await axios.post(
+    "https://api.linkedin.com/v2/assets?action=registerUpload",
+    {
+      registerUploadRequest: {
+        recipes: [
+          mediaType === "IMAGE"
+            ? "urn:li:digitalmediaRecipe:feedshare-image"
+            : "urn:li:digitalmediaRecipe:feedshare-video",
+        ],
+        owner: `urn:li:person:${linkedinId}`,
+        serviceRelationships: [
+          {
+            relationshipType: "OWNER",
+            identifier: "urn:li:userGeneratedContent",
+          },
+        ],
+      },
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      timeout: 30000,
+    }
+  );
+
+  const uploadUrl =
+    registerUploadResponse.data.value.uploadMechanism[
+      "com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"
+    ].uploadUrl;
+  const asset = registerUploadResponse.data.value.asset;
+
+  // For large files, use streaming upload
+  const fileSize = fs.statSync(mediaFile.path).size;
+  const isLargeFile = fileSize > 50 * 1024 * 1024; // 50MB threshold
+
+  if (isLargeFile) {
+    console.log("Large file detected, using streaming upload...");
+
+    // Stream upload for better memory efficiency
+    const fileStream = fs.createReadStream(mediaFile.path, {
+      highWaterMark: 1024 * 1024, // 1MB chunks
+    });
+
+    await axios.put(uploadUrl, fileStream, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": mediaFile.mimetype,
+        "Content-Length": fileSize,
+      },
+      timeout: 300000, // 5 minutes for large files
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
+      // Enable compression
+      decompress: true,
+    });
+  } else {
+    // Standard upload for smaller files
+    await axios.put(uploadUrl, fs.readFileSync(mediaFile.path), {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": mediaFile.mimetype,
+      },
+      timeout: 120000, // 2 minutes
+    });
+  }
+
+  console.log(`LinkedIn media uploaded successfully. Asset: ${asset}`);
+  return { asset, mediaType };
+};
 module.exports.postTwitter = async (
   { twittertoken, twittertokenSecret },
   tweet,
-  mediaFile
+  mediaFiles
 ) => {
   const authToken = { key: twittertoken, secret: twittertokenSecret };
-  let mediaId;
+  let mediaIds = [];
 
-  if (mediaFile) {
-    const validation = validateTwitterMedia(mediaFile);
-    if (!validation.valid) {
-      throw new Error(`Media validation failed: ${validation.error}`);
-    }
-
-    let mimetype = mediaFile.mimetype;
-    if (!mimetype) {
-      const ext = path
-        .extname(mediaFile.path || mediaFile.originalname || "")
-        .toLowerCase();
-      const mimetypeMap = {
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".png": "image/png",
-        ".gif": "image/gif",
-        ".webp": "image/webp",
-        ".mp4": "video/mp4",
-        ".mov": "video/quicktime",
-        ".avi": "video/x-msvideo",
-      };
-      mimetype = mimetypeMap[ext];
-    }
-
-    const mediaCategory = getMediaCategory(mimetype, mediaFile.path);
-
-    if (!mediaCategory) {
-      throw new Error(`Unsupported media type: ${mimetype || "unknown"}`);
-    }
-
-    console.log(
-      `Uploading media file: ${
-        mediaFile.originalname || path.basename(mediaFile.path) || "unknown"
-      }`
-    );
-    console.log(`Media type: ${mimetype}`);
-    console.log(`Media category: ${mediaCategory}`);
-    console.log(`File size: ${fs.statSync(mediaFile.path).size} bytes`);
-
-    try {
-      if (mimetype && mimetype.startsWith("video/")) {
-        mediaId = await uploadMediaChunked(
-          mediaFile,
-          authToken,
-          mediaCategory,
-          mimetype
-        );
-      } else {
-        const mediaUploadUrl =
-          process.env.TWITTER_MEDIA_UPLOAD_URL ||
-          "https://upload.twitter.com/1.1/media/upload.json";
-        const formData = new FormData();
-
-        formData.append("media", fs.createReadStream(mediaFile.path), {
-          filename: path.basename(mediaFile.path),
-          contentType: mimetype,
-        });
-
-        const mediaHeaders = oauthInstance.toHeader(
-          oauthInstance.authorize(
-            { url: mediaUploadUrl, method: "POST" },
-            authToken
-          )
-        );
-
-        const uploadResponse = await axios.post(mediaUploadUrl, formData, {
-          headers: { ...mediaHeaders, ...formData.getHeaders() },
-          maxContentLength: Infinity,
-          maxBodyLength: Infinity,
-          timeout: 60000,
-        });
-
-        mediaId = uploadResponse.data.media_id_string;
+  if (mediaFiles && mediaFiles.length > 0) {
+    for (const mediaFile of mediaFiles) {
+      const validation = validateTwitterMedia(mediaFile);
+      if (!validation.valid) {
+        throw new Error(`Media validation failed: ${validation.error}`);
       }
 
-      console.log(`Media uploaded successfully. Media ID: ${mediaId}`);
-    } catch (error) {
-      console.error(
-        "Error uploading media:",
-        error.response?.data || error.message
-      );
-
-      if (error.response) {
-        console.error("Response status:", error.response.status);
-        console.error("Response headers:", error.response.headers);
-        console.error("Response data:", error.response.data);
+      // Determine mimetype more reliably
+      let mimetype = mediaFile.mimetype;
+      if (!mimetype) {
+        const ext = path
+          .extname(mediaFile.path || mediaFile.originalname || "")
+          .toLowerCase();
+        const mimetypeMap = {
+          ".jpg": "image/jpeg",
+          ".jpeg": "image/jpeg",
+          ".png": "image/png",
+          ".gif": "image/gif",
+          ".webp": "image/webp",
+          ".mp4": "video/mp4",
+          ".mov": "video/quicktime",
+          ".avi": "video/x-msvideo",
+        };
+        mimetype = mimetypeMap[ext] || "application/octet-stream";
       }
 
-      throw new Error(
-        `Media upload failed: ${error.response?.data?.error || error.message}`
+      const mediaCategory = getMediaCategory(mimetype, mediaFile.path);
+      if (!mediaCategory) {
+        throw new Error(`Unsupported media type: ${mimetype || "unknown"}`);
+      }
+
+      console.log(
+        `Uploading media file: ${
+          mediaFile.originalname || path.basename(mediaFile.path)
+        }`
       );
+      console.log(`Media type: ${mimetype}`);
+      console.log(`Media category: ${mediaCategory}`);
+
+      try {
+        // For videos, use chunked upload
+        if (mediaCategory === "tweet_video") {
+          const mediaId = await uploadMediaChunked(
+            mediaFile,
+            authToken,
+            mediaCategory,
+            mimetype
+          );
+          mediaIds.push(mediaId);
+        }
+        // For images, use simple upload
+        else {
+          const mediaUploadUrl =
+            process.env.TWITTER_MEDIA_UPLOAD_URL ||
+            "https://upload.twitter.com/1.1/media/upload.json";
+          const formData = new FormData();
+
+          formData.append("media", fs.createReadStream(mediaFile.path), {
+            filename: path.basename(mediaFile.path),
+            contentType: mimetype,
+          });
+
+          const mediaHeaders = oauthInstance.toHeader(
+            oauthInstance.authorize(
+              { url: mediaUploadUrl, method: "POST" },
+              authToken
+            )
+          );
+
+          const uploadResponse = await axios.post(mediaUploadUrl, formData, {
+            headers: { ...mediaHeaders, ...formData.getHeaders() },
+            maxContentLength: Infinity,
+            maxBodyLength: Infinity,
+            timeout: 60000,
+          });
+
+          mediaIds.push(uploadResponse.data.media_id_string);
+        }
+      } catch (error) {
+        console.error(
+          "Error uploading media:",
+          error.response?.data || error.message
+        );
+        throw new Error(
+          `Media upload failed: ${error.response?.data?.error || error.message}`
+        );
+      }
     }
   }
 
+  // Post the tweet with media
   const tweetUrl = process.env.TWEET_URL || "https://api.twitter.com/2/tweets";
-
   const tweetHeaders = oauthInstance.toHeader(
-    oauthInstance.authorize(
-      {
-        url: tweetUrl,
-        method: "POST",
-      },
-      authToken
-    )
+    oauthInstance.authorize({ url: tweetUrl, method: "POST" }, authToken)
   );
 
   const tweetData = { text: tweet };
-  if (mediaId) {
-    tweetData.media = { media_ids: [mediaId] };
+  if (mediaIds.length > 0) {
+    tweetData.media = { media_ids: mediaIds };
   }
 
   try {
-    console.log("Posting tweet with data:", JSON.stringify(tweetData, null, 2));
-
     const response = await axios.post(tweetUrl, tweetData, {
       headers: {
         ...tweetHeaders,
         "Content-Type": "application/json",
         Accept: "application/json",
       },
-      timeout: 30000, // 30 second timeout
+      timeout: 30000,
     });
 
-    console.log("Tweet posted successfully:", response.data);
     return response.data;
   } catch (error) {
     console.error(
       "Error posting tweet:",
       error.response?.data || error.message
     );
-
-    if (error.response) {
-      console.error("Response status:", error.response.status);
-      console.error("Response data:", error.response.data);
-    }
-
     throw new Error(
       `Tweet posting failed: ${
         error.response?.data?.detail ||
@@ -411,6 +568,7 @@ module.exports.postLinkedIn = async (
   isDraft = false
 ) => {
   try {
+    console.log("111111111111",mediaFile)
     const linkedUserId = linkedinId;
     if (!linkedUserId) {
       throw new Error("User not found or no linkedinId");
@@ -438,7 +596,7 @@ module.exports.postLinkedIn = async (
       );
 
       const registerUploadResponse = await axios.post(
-        mediaUploadUrl,
+        "https://api.linkedin.com/v2/assets?action=registerUpload",
         {
           registerUploadRequest: {
             recipes: [
@@ -482,6 +640,7 @@ module.exports.postLinkedIn = async (
       console.log(`LinkedIn media uploaded successfully. Asset: ${asset}`);
     }
 
+    // 4. Create the post
     const requestBody = {
       author: `urn:li:person:${linkedinId}`,
       lifecycleState: lifecycleState,
