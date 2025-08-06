@@ -6,7 +6,7 @@ const { upload, handleMulterError } = require("./fileStorage");
 
 router.post(
   "/post/all",
-  upload.single("media"),
+  upload.array("media", 4),
   handleMulterError,
   PostController.postAll
 );
