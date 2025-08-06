@@ -42,8 +42,9 @@ const executePosts = async (
         const isDraft = publishStatus === "draft";
 
         // LinkedIn only uses first media file
-        const linkedInMediaFile = mediaFiles && mediaFiles.length > 0 ? mediaFiles[0] : null;
-        
+        const linkedInMediaFile =
+          mediaFiles && mediaFiles.length > 0 ? mediaFiles[0] : null;
+        console.log("1111111111111111111111",linkedInMediaFile)
         linkedInResponse = await postLinkedIn(
           linkedinId,
           linkedAccesToken,
@@ -58,7 +59,7 @@ const executePosts = async (
 
       // Clean up all media files if they exist
       if (mediaFiles && mediaFiles.length > 0) {
-        mediaFiles.forEach(file => {
+        mediaFiles.forEach((file) => {
           if (file.path && fs.existsSync(file.path)) {
             fs.unlinkSync(file.path);
           }
@@ -83,13 +84,15 @@ const executePosts = async (
       let mediaPaths = [];
       if (mediaFiles && mediaFiles.length > 0) {
         fs.mkdirSync("scheduled_media", { recursive: true });
-        
-        mediaPaths = mediaFiles.map(file => {
+
+        mediaPaths = mediaFiles.map((file) => {
           if (!file.path) {
             throw new Error("Media file path is missing");
           }
-          
-          const permanentPath = `scheduled_media/${Date.now()}_${file.originalname || path.basename(file.path)}`;
+
+          const permanentPath = `scheduled_media/${Date.now()}_${
+            file.originalname || path.basename(file.path)
+          }`;
           fs.copyFileSync(file.path, permanentPath);
           fs.unlinkSync(file.path);
           return permanentPath;
@@ -143,7 +146,7 @@ const executePosts = async (
 
     // Clean up all media files in case of error
     if (mediaFiles && mediaFiles.length > 0) {
-      mediaFiles.forEach(file => {
+      mediaFiles.forEach((file) => {
         if (file.path && fs.existsSync(file.path)) {
           fs.unlinkSync(file.path);
         }
