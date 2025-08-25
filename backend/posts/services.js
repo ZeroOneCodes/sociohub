@@ -9,7 +9,7 @@ const executePosts = async (
   twittertokenSecret,
   linkedAccesToken,
   postContent,
-  mediaFile,
+  mediaFiles, // Changed to accept array of files
   linkedinId
 ) => {
   try {
@@ -33,7 +33,7 @@ const executePosts = async (
         twitterResponse = await postTwitter(
           { twittertoken, twittertokenSecret },
           content,
-          mediaFile
+          mediaFiles // Pass array to Twitter function
         );
       }
 
@@ -41,21 +41,29 @@ const executePosts = async (
         const tags = rawTags ? JSON.parse(rawTags) : [];
         const isDraft = publishStatus === "draft";
 
+        // LinkedIn only uses first media file
+        const linkedInMediaFile =
+          mediaFiles && mediaFiles.length > 0 ? mediaFiles[0] : null;
+        console.log("1111111111111111111111",linkedInMediaFile)
         linkedInResponse = await postLinkedIn(
           linkedinId,
           linkedAccesToken,
           content,
           title,
           tags,
-          mediaFile,
+          linkedInMediaFile,
           contentFormat,
           isDraft
         );
       }
 
-      // Clean up media file if it exists
-      if (mediaFile && fs.existsSync(mediaFile.path)) {
-        fs.unlinkSync(mediaFile.path);
+      // Clean up all media files if they exist
+      if (mediaFiles && mediaFiles.length > 0) {
+        mediaFiles.forEach((file) => {
+          if (file.path && fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+          }
+        });
       }
 
       return {
@@ -72,16 +80,23 @@ const executePosts = async (
         throw new Error("Scheduled time must be in the future");
       }
 
-      // Save media file to a permanent location if it exists
-      let mediaPath = null;
-      if (mediaFile) {
-        const permanentPath = `scheduled_media/${Date.now()}_${
-          mediaFile.originalname
-        }`;
+      // Save media files to permanent locations if they exist
+      let mediaPaths = [];
+      if (mediaFiles && mediaFiles.length > 0) {
         fs.mkdirSync("scheduled_media", { recursive: true });
-        fs.copyFileSync(mediaFile.path, permanentPath);
-        fs.unlinkSync(mediaFile.path);
-        mediaPath = permanentPath;
+
+        mediaPaths = mediaFiles.map((file) => {
+          if (!file.path) {
+            throw new Error("Media file path is missing");
+          }
+
+          const permanentPath = `scheduled_media/${Date.now()}_${
+            file.originalname || path.basename(file.path)
+          }`;
+          fs.copyFileSync(file.path, permanentPath);
+          fs.unlinkSync(file.path);
+          return permanentPath;
+        });
       }
 
       // Prepare message for queue
@@ -94,7 +109,7 @@ const executePosts = async (
         tags: rawTags,
         publishStatus,
         contentFormat,
-        mediaPath,
+        mediaPaths, // Now an array of paths
         user: {
           twitter:
             postToTwitter === "true"
@@ -129,9 +144,13 @@ const executePosts = async (
   } catch (error) {
     console.error("Error in combined posting:", error);
 
-    // Clean up media file in case of error
-    if (mediaFile && fs.existsSync(mediaFile.path)) {
-      fs.unlinkSync(mediaFile.path);
+    // Clean up all media files in case of error
+    if (mediaFiles && mediaFiles.length > 0) {
+      mediaFiles.forEach((file) => {
+        if (file.path && fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+      });
     }
 
     throw {

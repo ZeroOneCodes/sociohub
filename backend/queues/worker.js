@@ -1,6 +1,6 @@
 require("dotenv/config");
 const amqp = require("amqplib");
-const path = require("path"); // Added missing path module
+const path = require("path");
 const { postTwitter, postLinkedIn } = require("../posts/helperFunctions");
 const fs = require("fs");
 
@@ -35,92 +35,95 @@ module.exports.startWorker = async () => {
     console.log("✅ Worker started, waiting for messages...");
 
     channel.consume(QUEUE_NAME, async (msg) => {
-      let message; // Declare message at the start of the callback
+      let message;
       try {
         message = JSON.parse(msg.content.toString());
         const now = Date.now();
 
         // If message isn't ready to be processed yet
         if (message.scheduledTime > now) {
-          // Requeue with delay (RabbitMQ 3.8+)
           channel.nack(msg, false, true);
           return;
         }
 
+        console.log(`Processing scheduled post with ${Array.isArray(message.mediaPaths) ? message.mediaPaths.length : message.mediaPath ? 1 : 0} media files`);
+
         // Process Twitter post if enabled
         if (message.postToTwitter === "true" && message.user?.twitter) {
+          const mediaFiles = getMediaFiles(message);
+          console.log(`Posting to Twitter with ${mediaFiles?.length || 0} media files`);
+          
           await postTwitter(
             {
               twittertoken: message.user.twitter.twittertoken,
               twittertokenSecret: message.user.twitter.twittertokenSecret,
             },
             message.content,
-            message.mediaPath
-              ? {
-                  path: message.mediaPath,
-                  originalname: path.basename(message.mediaPath),
-                }
-              : null
+            mediaFiles
           );
         }
 
         // Process LinkedIn post if enabled
-        if (message.postToLinkedIn === "true" && message.user?.linkedin) {
-          const tags = message.tags ? JSON.parse(message.tags) : [];
-          await postLinkedIn(
-            message.user.linkedin.linkedinId,
-            message.user.linkedin.linkedinAccessToken,
-            message.content,
-            message.title,
-            tags,
-            message.mediaPath
-              ? {
-                  path: message.mediaPath,
-                  mimetype: getMimeType(message.mediaPath),
-                }
-              : null,
-            message.contentFormat,
-            message.publishStatus === "draft"
-          );
-        }
+// Update the LinkedIn posting logic in your worker:
+// Update the LinkedIn posting logic in your worker:
+if (message.postToLinkedIn === "true" && message.user?.linkedin) {
+  const tags = message.tags ? JSON.parse(message.tags) : [];
+  const mediaFiles = getMediaFiles(message);
+  
+  if (mediaFiles && mediaFiles.length > 0) {
+    console.log(`Preparing LinkedIn post with media file: ${mediaFiles[0].path}`);
+    
+    // LinkedIn requires specific media handling
+    const linkedInMediaFile = {
+      path: mediaFiles[0].path,
+      mimetype: mediaFiles[0].mimetype,
+      originalname: mediaFiles[0].originalname
+    };
 
-        // Clean up media file
-        if (message.mediaPath && fs.existsSync(message.mediaPath)) {
-          fs.unlinkSync(message.mediaPath);
-        }
+    // Verify the file exists and is readable
+    if (!fs.existsSync(linkedInMediaFile.path)) {
+      throw new Error(`Media file not found: ${linkedInMediaFile.path}`);
+    }
+
+    console.log(`Media file details: ${JSON.stringify({
+      size: fs.statSync(linkedInMediaFile.path).size,
+      type: linkedInMediaFile.mimetype,
+      lastModified: fs.statSync(linkedInMediaFile.path).mtime
+    })}`);
+
+    await postLinkedIn(
+      message.user.linkedin.linkedinId,
+      message.user.linkedin.linkedinAccessToken,
+      message.content,
+      message.title,
+      tags,
+      linkedInMediaFile,  // Make sure this contains all required fields
+      message.contentFormat,
+      message.publishStatus === "draft"
+    );
+  } else {
+    console.log("Creating LinkedIn post without media");
+    await postLinkedIn(
+      message.user.linkedin.linkedinId,
+      message.user.linkedin.linkedinAccessToken,
+      message.content,
+      message.title,
+      tags,
+      null,
+      message.contentFormat,
+      message.publishStatus === "draft"
+    );
+  }
+}
+
+        // Clean up media files
+        cleanupMediaFiles(message);
 
         channel.ack(msg);
-        console.log("Scheduled post processed successfully");
+        console.log("✅ Scheduled post processed successfully");
       } catch (error) {
-        console.error("Error processing scheduled post:", error);
-
-        // Implement exponential backoff for retries
-        const retryCount = msg.properties.headers["x-retry-count"] || 0;
-        if (retryCount < 3) {
-          const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
-          channel.nack(msg, false, false);
-          setTimeout(() => {
-            channel.publish("", QUEUE_NAME, msg.content, {
-              headers: { "x-retry-count": retryCount + 1 },
-            });
-          }, delay);
-        } else {
-          // Move to dead letter queue after max retries
-          channel.nack(msg, false, false);
-          console.error("Max retries reached for message:", message);
-
-          // Archive failed message
-          if (message && message.mediaPath && fs.existsSync(message.mediaPath)) {
-            const failedDir = "failed_posts";
-            if (!fs.existsSync(failedDir)) {
-              fs.mkdirSync(failedDir, { recursive: true });
-            }
-            fs.renameSync(
-              message.mediaPath,
-              `${failedDir}/${path.basename(message.mediaPath)}`
-            );
-          }
-        }
+        console.error("❌ Error processing scheduled post:", error.message);
+        handleFailedMessage(channel, msg, message, error);
       }
     });
 
@@ -140,17 +143,109 @@ module.exports.startWorker = async () => {
   }
 };
 
+// Helper function to get media files array
+function getMediaFiles(message) {
+  if (!message.mediaPaths && !message.mediaPath) return null;
+
+  const paths = Array.isArray(message.mediaPaths) 
+    ? message.mediaPaths 
+    : message.mediaPath 
+      ? [message.mediaPath] 
+      : [];
+
+  return paths.map(filePath => {
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`Media file not found: ${filePath}`);
+    }
+    return {
+      path: filePath,
+      originalname: path.basename(filePath),
+      mimetype: getMimeType(filePath)
+    };
+  });
+}
+
+// Helper function to clean up media files
+function cleanupMediaFiles(message) {
+  const filesToClean = Array.isArray(message.mediaPaths)
+    ? message.mediaPaths
+    : message.mediaPath
+      ? [message.mediaPath]
+      : [];
+
+  filesToClean.forEach(filePath => {
+    try {
+      if (filePath && fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        console.log(`Cleaned up file: ${filePath}`);
+      }
+    } catch (cleanupError) {
+      console.error(`Error cleaning up file ${filePath}:`, cleanupError);
+    }
+  });
+}
+
+// Helper function to handle failed messages
+function handleFailedMessage(channel, msg, message, error) {
+  const retryCount = msg.properties.headers["x-retry-count"] || 0;
+  
+  if (retryCount < 3) {
+    const delay = Math.pow(2, retryCount) * 1000; // Exponential backoff
+    console.log(`Retrying message in ${delay}ms (attempt ${retryCount + 1})`);
+    channel.nack(msg, false, false);
+    setTimeout(() => {
+      channel.publish("", QUEUE_NAME, msg.content, {
+        headers: { "x-retry-count": retryCount + 1 },
+      });
+    }, delay);
+  } else {
+    // Move to dead letter queue after max retries
+    console.error("Max retries reached for message:", message);
+    channel.nack(msg, false, false);
+    
+    // Archive failed message and media files
+    archiveFailedPost(message);
+  }
+}
+
+// Helper function to archive failed posts
+function archiveFailedPost(message) {
+  if (!message.mediaPaths && !message.mediaPath) return;
+
+  const failedDir = "failed_posts";
+  if (!fs.existsSync(failedDir)) {
+    fs.mkdirSync(failedDir, { recursive: true });
+  }
+
+  const filesToArchive = Array.isArray(message.mediaPaths)
+    ? message.mediaPaths
+    : [message.mediaPath];
+
+  filesToArchive.forEach(filePath => {
+    if (filePath && fs.existsSync(filePath)) {
+      try {
+        const newPath = `${failedDir}/${Date.now()}_${path.basename(filePath)}`;
+        fs.renameSync(filePath, newPath);
+        console.log(`Archived failed media file to: ${newPath}`);
+      } catch (archiveError) {
+        console.error(`Error archiving file ${filePath}:`, archiveError);
+      }
+    }
+  });
+}
+
+// Helper function to get MIME type from file extension
 function getMimeType(filePath) {
   const ext = path.extname(filePath).toLowerCase();
-  switch (ext) {
-    case ".jpg":
-    case ".jpeg":
-      return "image/jpeg";
-    case ".png":
-      return "image/png";
-    case ".mp4":
-      return "video/mp4";
-    default:
-      return "application/octet-stream";
-  }
+  const mimeTypes = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.mp4': 'video/mp4',
+    '.mov': 'video/quicktime',
+    '.avi': 'video/x-msvideo'
+  };
+  return mimeTypes[ext] || 'application/octet-stream';
 }
